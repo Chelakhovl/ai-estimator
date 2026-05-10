@@ -61,13 +61,18 @@ def validate_and_materialize_match(
         area = area[:50]
         assumptions.append(
             PreviewAssumption(
-                text=f"AREA was truncated to 50 characters for row '{candidate.WorkName}'."
+                text=f"AREA was truncated to 50 characters for row '{candidate.WorkName}'.",
+                kind="area_truncated",
+                severity="info",
             )
         )
 
     confidence = llm_row.Confidence if llm_row.Confidence is not None else 0.7
     confidence = min(1, max(0, confidence))
     needs_review = llm_row.NeedsReview if llm_row.NeedsReview is not None else confidence < 0.75
+    review_reason = llm_row.ReviewReason
+    if needs_review and not review_reason:
+        review_reason = "Model flagged this row for manual review."
 
     client_cost_per_unit = calculate_client_cost_per_unit(
         work_labour_cost=candidate.WorkLabourCost,
@@ -98,5 +103,6 @@ def validate_and_materialize_match(
         ClientTotalCost=client_total_cost,
         Confidence=round(confidence, 2),
         NeedsReview=needs_review,
+        ReviewReason=review_reason,
     )
     return matched_row, assumptions

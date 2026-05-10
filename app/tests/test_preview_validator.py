@@ -40,6 +40,7 @@ def test_validator_preserves_candidate_defaults_when_zero_not_explicitly_allowed
     assert matched_row.MaterialMarkup == 10
     assert matched_row.ClientCostPerUnit == 20.4
     assert matched_row.ClientTotalCost == 2448.0
+    assert matched_row.ReviewReason is None
     assert assumptions == []
 
 

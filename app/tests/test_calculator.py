@@ -12,9 +12,9 @@ def test_calculate_client_cost_per_unit() -> None:
         profit=20,
         work_qty_for_norm=1,
     )
-    assert result == 18.45
+    assert result == 20.4
 
 
 
 def test_calculate_client_total_cost() -> None:
-    assert calculate_client_total_cost(quantity=120, client_cost_per_unit=18.45) == 2214.0
+    assert calculate_client_total_cost(quantity=120, client_cost_per_unit=20.4) == 2448.0

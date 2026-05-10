@@ -28,12 +28,15 @@ Runtime flow:
 This repository now contains a **working v1 preview service skeleton** with:
 - `GET /health`
 - `POST /v1/estimate/preview`
+- `POST /v1/estimate/extract-scope`
 - strict request/response schemas
 - deterministic price calculation helpers
 - candidate shortlist logic
 - mock matching fallback
 - a real LLM integration point via `LLMClient`
 - validation of model-selected quote rows before totals are calculated
+- structured scope extraction for large house / extension / loft prompts
+- first deterministic takeoff summary from room schedules, foundation dimensions, and counted items
 
 Current runtime behavior:
 - if `OPENAI_API_KEY` and `OPENAI_MODEL` are not configured, the service runs in `mock` mode
@@ -80,6 +83,19 @@ Request example:
 }
 ```
 
+### `POST /v1/estimate/extract-scope`
+
+Purpose:
+- turn a large structured client prompt into a machine-readable scope object
+- extract property context, room schedule, section blocks, and first-pass takeoff metrics
+- provide a safer intermediate layer between "one huge prompt" and "final quote rows"
+
+Example use cases:
+- full house refurbishment
+- rear extension
+- loft conversion
+- mixed multi-trade house prompts with room dimensions, counts, and allowances
+
 Response example:
 
 ```json
@@ -119,12 +135,15 @@ Response example:
 - `app/schemas.py`: request/response schemas
 - `app/api/preview.py`: preview endpoint
 - `app/api/health.py`: health endpoint
+- `app/api/scope_extract.py`: structured scope extraction endpoint
 - `app/services/calculator.py`: deterministic pricing logic
 - `app/services/normalizer.py`: prompt normalization helpers
 - `app/services/candidate_shortlist.py`: shortlist builder
 - `app/services/matcher.py`: preview orchestration with mock + LLM fallback
 - `app/services/llm_client.py`: OpenAI Responses API integration point
 - `app/services/preview_validator.py`: validation and materialization of LLM-selected rows
+- `app/services/scope_extractor.py`: parser for large structured house prompts
+- `app/services/scope_takeoff.py`: deterministic takeoff summary builder
 - `app/tests/`: tests
 
 ## Local run
@@ -133,6 +152,36 @@ Response example:
 uvicorn app.main:app --reload
 ```
 
+## Evaluation
+
+We now keep a growing preview evaluation set under:
+
+- `app/tests/fixtures/preview_eval_cases.json`
+- `app/tests/fixtures/preview_large_project_eval_cases.json`
+
+These cases check:
+- exact matched row IDs
+- unmatched item count
+- review count
+- expected coverage-gap warnings for larger project scopes
+- stability on larger mixed-scope house / extension / loft prompts
+
+Run the deterministic mock evaluation locally:
+
+```bash
+python scripts/run_preview_eval.py
+```
+
+By default the runner forces `mock` mode so the results stay stable and comparable over time.
+If you want to try the same cases against the configured model path, run:
+
+```bash
+AI_EVAL_FORCE_LLM=1 python scripts/run_preview_eval.py
+```
+
 ## Next step
 
-Wire Power Automate HTTP calls to this service, then tighten the model prompt and validation loop using real estimating examples.
+Use `extract-scope` as the first stage for very large client prompts, then feed its structured output into:
+1. deterministic takeoff enrichment
+2. candidate row matching
+3. guarded quote draft creation
