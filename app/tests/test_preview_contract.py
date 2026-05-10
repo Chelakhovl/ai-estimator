@@ -3502,7 +3502,7 @@ def test_llm_preview_recovers_missing_quantity_from_takeoff_before_validation(mo
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3623,7 +3623,7 @@ def test_llm_preview_skips_invalid_guid_row_instead_of_crashing(monkeypatch) -> 
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
             return LLMPreviewOutput.model_validate(fake_llm_output)
 
@@ -3692,7 +3692,7 @@ def test_llm_preview_rejects_rows_without_direct_scope_support(monkeypatch) -> N
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3760,7 +3760,7 @@ def test_llm_preview_forces_do_not_include_rows_to_unmatched(monkeypatch) -> Non
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3829,7 +3829,7 @@ def test_llm_preview_forces_review_for_human_guardrail_status_labels(monkeypatch
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3889,7 +3889,7 @@ def test_llm_preview_fallback_captures_retry_telemetry(monkeypatch) -> None:
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             raise ValueError("Structured output parse failed twice.")
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
@@ -3947,7 +3947,7 @@ def test_llm_preview_does_not_silent_fallback_outside_local(monkeypatch) -> None
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             raise ValueError("Structured output parse failed twice.")
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
@@ -3998,7 +3998,7 @@ def test_llm_preview_uses_marked_fallback_for_normalized_intake_in_local(monkeyp
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             raise ValueError("Structured output parse failed.")
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
@@ -4096,7 +4096,7 @@ def test_llm_preview_retries_with_smaller_shortlist_after_token_budget_error(mon
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
 
             preview_calls.append(len(candidate_rows))
@@ -4215,7 +4215,7 @@ def test_llm_preview_reports_missing_quantity_with_human_readable_unmatched_item
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None):
+        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
