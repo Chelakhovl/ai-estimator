@@ -200,4 +200,7 @@ def infer_default_room_level(prompt: str) -> str | None:
             return level
     if "flat" in normalized or "converted" in normalized:
         return "First Floor"
+    house_keywords = ("house", "terraced", "detached", "semi-detached", "semi detached", "bungalow", "cottage", "property", "maisonette")
+    if any(keyword in normalized for keyword in house_keywords):
+        return "Ground Floor"
     return None

@@ -59,10 +59,9 @@ def _section_key_for_line(line: str) -> str | None:
 
 
 def _parse_room(line: str, level: str | None) -> ExtractedRoom | None:
-    if not level:
-        return None
+    level = level or "Ground Floor"
     match = re.match(
-        r"^(?P<name>.+?):\s*(?:approx\.?\s*)?(?P<width>\d+(?:\.\d+)?)\s*(?:m)?\s*[×x]\s*(?P<length>\d+(?:\.\d+)?)\s*(?:m)?$",
+        r"^(?P<name>.+?):\s*(?:approx\.?\s*)?(?P<width>\d+(?:\.\d+)?)\s*(?:m)?\s*[×x]\s*(?P<length>\d+(?:\.\d+)?)\s*(?:m)?(?:\s*[=,].*)?$",
         line,
         re.IGNORECASE,
     )

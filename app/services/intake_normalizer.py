@@ -399,7 +399,7 @@ def _has_answered_clarification(prompt: str, question_id: str) -> bool:
 
 def _room_line_match(line: str) -> re.Match[str] | None:
     return re.match(
-        r"^(?P<name>.+?):\s*(?:approx\.?\s*)?(?P<width>\d+(?:\.\d+)?)\s*(?:m)?\s*[×x]\s*(?P<length>\d+(?:\.\d+)?)\s*(?:m)?(?:\s*=.*)?$",
+        r"^(?P<name>.+?):\s*(?:approx\.?\s*)?(?P<width>\d+(?:\.\d+)?)\s*(?:m)?\s*[×x]\s*(?P<length>\d+(?:\.\d+)?)\s*(?:m)?(?:\s*[=,].*)?$",
         line,
         re.IGNORECASE,
     )
@@ -629,6 +629,8 @@ def _bathroom_fixture_question(prompt: str, normalized_scope) -> ClarificationQu
     normalized = prompt.lower()
     if not any(keyword in normalized for keyword in ("bathroom", "ensuite", "shower room", "wc", "sanitary")):
         return None
+    if _has_answered_clarification(prompt, "bathroom_fixture_scope"):
+        return None
     fixture_hits = {
         fixture_name
         for fixture_name, keywords in _BATHROOM_FIXTURE_GROUPS.items()
@@ -657,6 +659,8 @@ def _room_level_question(prompt: str, normalized_scope) -> ClarificationQuestion
     if normalized_scope.rooms:
         return None
     if not any(_room_line_match(line) for line in prepare_prompt_lines(prompt)):
+        return None
+    if _has_answered_clarification(prompt, "room_level"):
         return None
     if _infer_default_room_level(prompt):
         return None
@@ -697,6 +701,8 @@ def _supply_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
     if not any(keyword in normalized for keyword in ("sanitaryware", "appliance", "appliances", "kitchen", "kitchen units")):
         return None
+    if _has_answered_clarification(prompt, "supply_split"):
+        return None
     if any(marker in normalized for marker in _SUPPLY_MARKERS) or re.search(r"\b(supply|supplied|supply only)\b", normalized):
         return None
     if not (
@@ -722,6 +728,8 @@ def _supply_question(prompt: str) -> ClarificationQuestion | None:
 def _tiling_question(prompt: str, normalized_scope) -> ClarificationQuestion | None:
     normalized = prompt.lower()
     if "tile" not in normalized and "tiling" not in normalized:
+        return None
+    if _has_answered_clarification(prompt, "tiling_area_scope"):
         return None
     if normalized_scope.takeoff_summary.estimated_wet_room_wall_tiling_area_m2 > 0:
         return None
@@ -785,6 +793,62 @@ def _allowance_question(prompt: str) -> ClarificationQuestion | None:
     )
 
 
+def _ceiling_height_question(prompt: str, normalized_scope) -> ClarificationQuestion | None:
+    normalized = prompt.lower()
+    has_wall_work = any(kw in normalized for kw in (
+        "plaster", "skim", "emulsion", "paint wall", "paint ceil", "decor", "tiling", "tile",
+    ))
+    has_rooms = bool(normalized_scope.rooms)
+    if not has_wall_work or not has_rooms:
+        return None
+    already_given = bool(re.search(
+        r"ceiling\s*height|floor.to.ceiling|storey\s*height|\d+\.?\d*\s*m\s+(?:ceiling|height)",
+        normalized, re.IGNORECASE,
+    ))
+    if already_given:
+        return None
+    if _has_answered_clarification(prompt, "ceiling_height"):
+        return None
+    return ClarificationQuestion(
+        id="ceiling_height",
+        label="What is the floor-to-ceiling height in the main areas?",
+        reason="Wall area calculations for plastering, painting, and tiling depend on ceiling height. Without it the system assumes 2.4m, which can under-price a Victorian terrace by 15–25%.",
+        answer_type="single_select",
+        options=[
+            ClarificationQuestionOption(value="2.4m", label="2.4m — standard modern build"),
+            ClarificationQuestionOption(value="2.55m", label="2.55m — mid-century or newer terrace"),
+            ClarificationQuestionOption(value="2.75m", label="2.75m — older / pre-war property"),
+            ClarificationQuestionOption(value="3.0m", label="3.0m — Victorian / period high ceilings"),
+            ClarificationQuestionOption(value="varies", label="Varies floor by floor"),
+        ],
+        applies_to_section="Plastering / Decorating",
+        required=False,
+    )
+
+
+def _door_count_question(prompt: str) -> ClarificationQuestion | None:
+    normalized = prompt.lower()
+    has_woodwork = any(kw in normalized for kw in ("gloss", "woodwork", "skirting", "architrave"))
+    if not has_woodwork:
+        return None
+    has_explicit_count = bool(
+        re.search(r"\b\d+\s*(?:no\.?\s*)?(?:internal\s*)?doors?\b", normalized)
+        or re.search(r"\bdoors?\s*[:=]\s*\d+", normalized)
+    )
+    if has_explicit_count:
+        return None
+    if _has_answered_clarification(prompt, "door_count"):
+        return None
+    return ClarificationQuestion(
+        id="door_count",
+        label="How many internal doors need gloss / woodwork painting?",
+        reason="Woodwork painting was requested without a door count. Doors are priced per unit and the total can vary significantly.",
+        answer_type="number",
+        applies_to_section="Woodwork Painting",
+        required=False,
+    )
+
+
 def _waste_access_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
     if not any(marker in normalized for marker in _WASTE_ACCESS_AMBIGUITY_MARKERS):
@@ -811,9 +875,11 @@ def _waste_access_question(prompt: str) -> ClarificationQuestion | None:
 def _build_questions(prompt: str, normalized_scope) -> list[ClarificationQuestion]:
     questions = [
         _room_level_question(prompt, normalized_scope),
+        _ceiling_height_question(prompt, normalized_scope),
         _bathroom_fixture_question(prompt, normalized_scope),
         _steel_question(prompt),
         _supply_question(prompt),
+        _door_count_question(prompt),
         _scaffold_question(prompt),
         _permit_cdm_question(prompt),
         _allowance_question(prompt),

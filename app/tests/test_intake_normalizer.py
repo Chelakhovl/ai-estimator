@@ -16,6 +16,7 @@ def test_normalize_prompt_infers_first_floor_flat_room_schedule() -> None:
 PROJECT DETAILS
 Property: First floor flat, mid-terrace house (converted)
 Location: Muswell Hill, London
+Ceiling height: 2.4m
 
 AREAS
 Open plan (living + kitchen): 6.7 x 7.0
