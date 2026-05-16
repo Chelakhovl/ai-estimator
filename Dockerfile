@@ -14,4 +14,4 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 EXPOSE 8001
 
-CMD ["sh", "-c", "uvicorn app.main:app --host $APP_HOST --port $APP_PORT --workers 2"]
+CMD ["sh", "-c", "uvicorn app.main:app --host $APP_HOST --port ${PORT:-$APP_PORT} --workers 2"]
