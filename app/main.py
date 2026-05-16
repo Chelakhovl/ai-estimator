@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    is_local = settings.app_env.lower() in {"local", "test"}
+
     if not settings.openai_api_key:
         logger.warning(
             "OPENAI_API_KEY is not set — all AI endpoints will run in mock/degraded mode."
@@ -28,9 +30,15 @@ async def lifespan(app: FastAPI):
             "OPENAI_MODEL is not set — preview endpoint will use mock mode."
         )
     if not settings.service_api_key:
-        logger.warning(
-            "SERVICE_API_KEY is not set — API authentication is disabled for all routes."
-        )
+        if is_local:
+            logger.warning(
+                "SERVICE_API_KEY is not set — API authentication is disabled for all routes."
+            )
+        else:
+            raise RuntimeError(
+                "SERVICE_API_KEY must be set in non-local environments. "
+                "Set APP_ENV=local to run without authentication."
+            )
     yield
 
 
