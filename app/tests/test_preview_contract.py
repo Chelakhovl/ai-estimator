@@ -5,14 +5,25 @@ from pathlib import Path
 import app.config as app_config
 import app.services.llm_client as app_llm_client
 import app.services.matcher as app_matcher
-from app.schemas import CandidateRow, PreviewAcceptedExample, PreviewAcceptedExampleRow, PreviewRequest
+from app.schemas import (
+    CandidateRow,
+    PreviewAcceptedExample,
+    PreviewAcceptedExampleRow,
+    PreviewRequest,
+)
 from app.services.candidate_shortlist import shortlist_candidates
 from app.services.matcher import generate_preview
 from app.services.normalizer import parse_quantity_and_unit, split_prompt_segments
-from app.services.prompt_builder import build_preview_system_prompt, build_preview_user_payload
+from app.services.prompt_builder import (
+    build_preview_system_prompt,
+    build_preview_user_payload,
+)
 from app.services.scope_extractor import extract_scope
 from app.services.scope_matching import match_row_to_extracted_section
-from app.services.scope_takeoff import TAKEOFF_HEURISTICS_SOURCE, TAKEOFF_HEURISTICS_VERSION
+from app.services.scope_takeoff import (
+    TAKEOFF_HEURISTICS_SOURCE,
+    TAKEOFF_HEURISTICS_VERSION,
+)
 import pytest
 
 
@@ -67,7 +78,9 @@ def test_preview_contract_returns_expected_shape(monkeypatch) -> None:
     assert all(prompt.title for prompt in response.coverage_prompts)
 
 
-def test_preview_without_llm_config_fails_fast_outside_local_or_test(monkeypatch) -> None:
+def test_preview_without_llm_config_fails_fast_outside_local_or_test(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
@@ -106,7 +119,9 @@ def test_preview_system_prompt_discloses_takeoff_heuristics_version() -> None:
     assert TAKEOFF_HEURISTICS_SOURCE in prompt
 
 
-def test_preview_builds_review_queue_and_coverage_prompts_from_unmatched_scope(monkeypatch) -> None:
+def test_preview_builds_review_queue_and_coverage_prompts_from_unmatched_scope(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -141,7 +156,9 @@ def test_preview_builds_review_queue_and_coverage_prompts_from_unmatched_scope(m
     assert response.review_queue
     assert response.coverage_prompts
     assert any(item.title == "Install gas cooker" for item in response.review_queue)
-    assert any(prompt.title == "Install gas cooker" for prompt in response.coverage_prompts)
+    assert any(
+        prompt.title == "Install gas cooker" for prompt in response.coverage_prompts
+    )
 
 
 def test_preview_uses_group_context_to_improve_mock_matching(monkeypatch) -> None:
@@ -195,7 +212,9 @@ def test_preview_uses_group_context_to_improve_mock_matching(monkeypatch) -> Non
     assert response.matched_rows[0].INSIDEQUOTESGUID == "inside-1"
 
 
-def test_preview_uses_takeoff_quantity_for_structured_switch_counts(monkeypatch) -> None:
+def test_preview_uses_takeoff_quantity_for_structured_switch_counts(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -237,10 +256,15 @@ def test_preview_uses_takeoff_quantity_for_structured_switch_counts(monkeypatch)
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].INSIDEQUOTESGUID == "inside-switches"
     assert response.matched_rows[0].QUANTITY == 32
-    assert any("derived from the structured scope takeoff" in (assumption.text or "") for assumption in response.assumptions)
+    assert any(
+        "derived from the structured scope takeoff" in (assumption.text or "")
+        for assumption in response.assumptions
+    )
 
 
-def test_preview_skips_measured_rows_without_explicit_or_recoverable_quantity(monkeypatch) -> None:
+def test_preview_skips_measured_rows_without_explicit_or_recoverable_quantity(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -276,7 +300,10 @@ def test_preview_skips_measured_rows_without_explicit_or_recoverable_quantity(mo
     assert response.matched_rows == []
     assert response.unmatched_items
     assert "could not be safely inferred" in response.unmatched_items[0].reason
-    assert any("no defensible takeoff" in (assumption.text or "") for assumption in response.assumptions)
+    assert any(
+        "no defensible takeoff" in (assumption.text or "")
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_extracted_section_completeness_warnings(monkeypatch) -> None:
@@ -318,7 +345,11 @@ def test_preview_uses_extracted_section_completeness_warnings(monkeypatch) -> No
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning")
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    )
 
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
@@ -365,7 +396,11 @@ def test_preview_flags_missing_electrical_detail_blocks(monkeypatch) -> None:
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning")
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    )
 
     assert response.error_text == ""
     assert "consumer unit / distribution board" in warning_text.lower()
@@ -417,7 +452,11 @@ def test_preview_flags_missing_structure_detail_blocks(monkeypatch) -> None:
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning")
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    )
 
     assert response.error_text == ""
     assert "flat roof / warm roof" in warning_text.lower()
@@ -473,7 +512,11 @@ def test_preview_flags_missing_deeper_roof_build_detail_blocks(monkeypatch) -> N
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning").lower()
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    ).lower()
 
     assert response.error_text == ""
     assert "dormer cheeks / cladding" in warning_text
@@ -526,7 +569,10 @@ def test_preview_uses_derived_wall_finish_takeoff(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 36.72
     assert response.matched_rows[0].NeedsReview is True
-    assert any("derived wall finish area" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "derived wall finish area" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_wall_takeoff_when_room_named(monkeypatch) -> None:
@@ -574,7 +620,10 @@ def test_preview_uses_room_specific_wall_takeoff_when_room_named(monkeypatch) ->
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 36.72
-    assert any("matched rooms: kitchen" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "matched rooms: kitchen" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_floor_takeoff_when_room_named(monkeypatch) -> None:
@@ -622,10 +671,15 @@ def test_preview_uses_room_specific_floor_takeoff_when_room_named(monkeypatch) -
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 20.3
-    assert any("matched rooms: kitchen dining" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "matched rooms: kitchen dining" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
-def test_preview_flags_room_specific_finish_gaps_when_finish_section_is_only_partially_matched(monkeypatch) -> None:
+def test_preview_flags_room_specific_finish_gaps_when_finish_section_is_only_partially_matched(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -671,12 +725,18 @@ def test_preview_flags_room_specific_finish_gaps_when_finish_section_is_only_par
 
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
-    gap_warnings = [assumption for assumption in response.assumptions if assumption.kind == "room_finish_coverage_gap"]
+    gap_warnings = [
+        assumption
+        for assumption in response.assumptions
+        if assumption.kind == "room_finish_coverage_gap"
+    ]
     assert gap_warnings
     assert "study" in gap_warnings[0].text.lower()
 
 
-def test_preview_skips_room_finish_gap_warning_when_no_finish_rows_matched_yet(monkeypatch) -> None:
+def test_preview_skips_room_finish_gap_warning_when_no_finish_rows_matched_yet(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -720,7 +780,10 @@ def test_preview_skips_room_finish_gap_warning_when_no_finish_rows_matched_yet(m
     response = generate_preview(request)
 
     assert response.error_text == ""
-    assert not any(assumption.kind == "room_finish_coverage_gap" for assumption in response.assumptions)
+    assert not any(
+        assumption.kind == "room_finish_coverage_gap"
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_socket_takeoff_when_room_named(monkeypatch) -> None:
@@ -769,7 +832,10 @@ def test_preview_uses_room_specific_socket_takeoff_when_room_named(monkeypatch) 
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 7
     assert response.matched_rows[0].NeedsReview is True
-    assert any("socket allowances" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "socket allowances" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_wet_room_wall_tiling_takeoff(monkeypatch) -> None:
@@ -817,7 +883,10 @@ def test_preview_uses_wet_room_wall_tiling_takeoff(monkeypatch) -> None:
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 8.98
-    assert any("wet-room wall tiling" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "wet-room wall tiling" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_wet_room_plumbing_points(monkeypatch) -> None:
@@ -867,7 +936,10 @@ def test_preview_uses_wet_room_plumbing_points(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 6
     assert response.matched_rows[0].NeedsReview is True
-    assert any("room-specific plumbing points" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "room-specific plumbing points" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_plumbing_second_fix_points(monkeypatch) -> None:
@@ -916,7 +988,10 @@ def test_preview_uses_room_specific_plumbing_second_fix_points(monkeypatch) -> N
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 4
     assert response.matched_rows[0].NeedsReview is True
-    assert any("room-specific plumbing points" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "room-specific plumbing points" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_sanitary_set_counts(monkeypatch) -> None:
@@ -966,7 +1041,10 @@ def test_preview_uses_room_specific_sanitary_set_counts(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 2
     assert response.matched_rows[0].NeedsReview is True
-    assert any("sanitary-set counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "sanitary-set counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_whole_property_wc_fixture_counts(monkeypatch) -> None:
@@ -1017,7 +1095,10 @@ def test_preview_uses_whole_property_wc_fixture_counts(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 3
     assert response.matched_rows[0].NeedsReview is True
-    assert any("whole-property wc fixture counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "whole-property wc fixture counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_explicit_double_basin_override(monkeypatch) -> None:
@@ -1065,10 +1146,15 @@ def test_preview_uses_explicit_double_basin_override(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 2
     assert response.matched_rows[0].NeedsReview is True
-    assert any("room-specific basin fixture counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "room-specific basin fixture counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
-def test_preview_holds_sanitary_supply_rows_for_client_supply_review(monkeypatch) -> None:
+def test_preview_holds_sanitary_supply_rows_for_client_supply_review(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -1115,7 +1201,10 @@ def test_preview_holds_sanitary_supply_rows_for_client_supply_review(monkeypatch
     assert response.matched_rows[0].QUANTITY == 1
     assert response.matched_rows[0].NeedsReview is True
     assert "client supplied" in (response.matched_rows[0].ReviewReason or "").lower()
-    assert any("client-supplied sanitaryware" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "client-supplied sanitaryware" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_vanity_unit_override(monkeypatch) -> None:
@@ -1163,7 +1252,10 @@ def test_preview_uses_vanity_unit_override(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 1
     assert response.matched_rows[0].NeedsReview is True
-    assert any("vanity unit counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "vanity unit counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_concealed_cistern_override(monkeypatch) -> None:
@@ -1211,7 +1303,10 @@ def test_preview_uses_concealed_cistern_override(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 1
     assert response.matched_rows[0].NeedsReview is True
-    assert any("concealed cistern counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "concealed cistern counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_appliance_connection_counts(monkeypatch) -> None:
@@ -1259,10 +1354,15 @@ def test_preview_uses_appliance_connection_counts(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 5
     assert response.matched_rows[0].NeedsReview is True
-    assert any("appliance connection counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "appliance connection counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
-def test_preview_holds_appliance_supply_rows_for_client_supply_review(monkeypatch) -> None:
+def test_preview_holds_appliance_supply_rows_for_client_supply_review(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -1310,7 +1410,10 @@ def test_preview_holds_appliance_supply_rows_for_client_supply_review(monkeypatc
     assert response.matched_rows[0].QUANTITY == 1
     assert response.matched_rows[0].NeedsReview is True
     assert "client supplied" in (response.matched_rows[0].ReviewReason or "").lower()
-    assert any("client-supplied appliances" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "client-supplied appliances" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_consumer_unit_count(monkeypatch) -> None:
@@ -1355,9 +1458,14 @@ def test_preview_uses_consumer_unit_count(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 1
     assert response.matched_rows[0].NeedsReview is True
-    assert any("consumer unit counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "consumer unit counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
     assert "specialist electrical review" in " ".join(
-        assumption.text.lower() for assumption in response.assumptions if assumption.text
+        assumption.text.lower()
+        for assumption in response.assumptions
+        if assumption.text
     )
 
 
@@ -1406,7 +1514,10 @@ def test_preview_uses_fire_rated_pocket_door_counts(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 4
     assert response.matched_rows[0].NeedsReview is True
-    assert any("fire-rated pocket door set counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "fire-rated pocket door set counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_joinery_detail_counts(monkeypatch) -> None:
@@ -1451,7 +1562,10 @@ def test_preview_uses_joinery_detail_counts(monkeypatch) -> None:
     assert len(staircase_response.matched_rows) == 1
     assert staircase_response.matched_rows[0].QUANTITY == 1
     assert staircase_response.matched_rows[0].NeedsReview is True
-    assert any("staircase counts" in (assumption.text or "").lower() for assumption in staircase_response.assumptions)
+    assert any(
+        "staircase counts" in (assumption.text or "").lower()
+        for assumption in staircase_response.assumptions
+    )
 
     storage_request = PreviewRequest(
         quote_guid="quote-storage-doors",
@@ -1489,7 +1603,10 @@ def test_preview_uses_joinery_detail_counts(monkeypatch) -> None:
     assert len(storage_response.matched_rows) == 1
     assert storage_response.matched_rows[0].QUANTITY == 3
     assert storage_response.matched_rows[0].NeedsReview is True
-    assert any("storage door-set counts" in (assumption.text or "").lower() for assumption in storage_response.assumptions)
+    assert any(
+        "storage door-set counts" in (assumption.text or "").lower()
+        for assumption in storage_response.assumptions
+    )
 
 
 def test_preview_flags_missing_door_and_joinery_detail_blocks(monkeypatch) -> None:
@@ -1535,7 +1652,11 @@ def test_preview_flags_missing_door_and_joinery_detail_blocks(monkeypatch) -> No
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning").lower()
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    ).lower()
 
     assert response.error_text == ""
     assert "fire-rated door sets" in warning_text
@@ -1590,7 +1711,10 @@ def test_preview_uses_woodwork_finish_baselines(monkeypatch) -> None:
     assert len(architrave_response.matched_rows) == 1
     assert architrave_response.matched_rows[0].QUANTITY == 32.4
     assert architrave_response.matched_rows[0].NeedsReview is True
-    assert any("architrave length" in (assumption.text or "").lower() for assumption in architrave_response.assumptions)
+    assert any(
+        "architrave length" in (assumption.text or "").lower()
+        for assumption in architrave_response.assumptions
+    )
 
     window_board_request = PreviewRequest(
         quote_guid="quote-window-boards",
@@ -1631,7 +1755,10 @@ def test_preview_uses_woodwork_finish_baselines(monkeypatch) -> None:
     assert len(window_board_response.matched_rows) == 1
     assert window_board_response.matched_rows[0].QUANTITY == 3.0
     assert window_board_response.matched_rows[0].NeedsReview is True
-    assert any("window board length" in (assumption.text or "").lower() for assumption in window_board_response.assumptions)
+    assert any(
+        "window board length" in (assumption.text or "").lower()
+        for assumption in window_board_response.assumptions
+    )
 
     skirting_request = PreviewRequest(
         quote_guid="quote-room-skirting",
@@ -1672,7 +1799,10 @@ def test_preview_uses_woodwork_finish_baselines(monkeypatch) -> None:
     assert len(skirting_response.matched_rows) == 1
     assert skirting_response.matched_rows[0].AREA == "Kitchen"
     assert skirting_response.matched_rows[0].NeedsReview is True
-    assert any("room-specific skirting length" in (assumption.text or "").lower() for assumption in skirting_response.assumptions)
+    assert any(
+        "room-specific skirting length" in (assumption.text or "").lower()
+        for assumption in skirting_response.assumptions
+    )
 
 
 def test_preview_flags_missing_woodwork_painting_detail_blocks(monkeypatch) -> None:
@@ -1723,7 +1853,11 @@ def test_preview_flags_missing_woodwork_painting_detail_blocks(monkeypatch) -> N
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning").lower()
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    ).lower()
 
     assert response.error_text == ""
     assert "painted door sets" in warning_text
@@ -1733,7 +1867,9 @@ def test_preview_flags_missing_woodwork_painting_detail_blocks(monkeypatch) -> N
     assert "window boards" in warning_text
 
 
-def test_preview_flags_level_specific_door_scope_when_matched_rows_stay_generic(monkeypatch) -> None:
+def test_preview_flags_level_specific_door_scope_when_matched_rows_stay_generic(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -1774,7 +1910,11 @@ def test_preview_flags_level_specific_door_scope_when_matched_rows_stay_generic(
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.kind == "level_joinery_coverage_gap").lower()
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.kind == "level_joinery_coverage_gap"
+    ).lower()
 
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
@@ -1835,10 +1975,15 @@ def test_preview_uses_structured_flooring_scope_area(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 30.0
     assert response.matched_rows[0].NeedsReview is True
-    assert any("hard-floor scope area" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "hard-floor scope area" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
-def test_preview_flags_missing_decorating_and_flooring_detail_blocks(monkeypatch) -> None:
+def test_preview_flags_missing_decorating_and_flooring_detail_blocks(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -1881,7 +2026,11 @@ def test_preview_flags_missing_decorating_and_flooring_detail_blocks(monkeypatch
     )
 
     response = generate_preview(request)
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning").lower()
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    ).lower()
 
     assert response.error_text == ""
     assert "wall decoration" in warning_text
@@ -1891,7 +2040,9 @@ def test_preview_flags_missing_decorating_and_flooring_detail_blocks(monkeypatch
     assert "carpet / underlay" in warning_text
 
 
-def test_preview_holds_rewire_and_circuit_scope_on_specialist_review(monkeypatch) -> None:
+def test_preview_holds_rewire_and_circuit_scope_on_specialist_review(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -1933,11 +2084,19 @@ def test_preview_holds_rewire_and_circuit_scope_on_specialist_review(monkeypatch
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].NeedsReview is True
-    assert "rewire scope should stay on specialist review" in (response.matched_rows[0].ReviewReason or "").lower()
-    assert "circuit-based electrical scope should stay on specialist review" in (response.matched_rows[0].ReviewReason or "").lower()
+    assert (
+        "rewire scope should stay on specialist review"
+        in (response.matched_rows[0].ReviewReason or "").lower()
+    )
+    assert (
+        "circuit-based electrical scope should stay on specialist review"
+        in (response.matched_rows[0].ReviewReason or "").lower()
+    )
 
 
-def test_preview_holds_boiler_ufh_and_gas_scope_on_specialist_review(monkeypatch) -> None:
+def test_preview_holds_boiler_ufh_and_gas_scope_on_specialist_review(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
     reload(app_config)
@@ -1978,7 +2137,11 @@ def test_preview_holds_boiler_ufh_and_gas_scope_on_specialist_review(monkeypatch
 
     response = generate_preview(request)
     review_reason = (response.matched_rows[0].ReviewReason or "").lower()
-    assumption_text = " ".join(assumption.text.lower() for assumption in response.assumptions if assumption.text)
+    assumption_text = " ".join(
+        assumption.text.lower()
+        for assumption in response.assumptions
+        if assumption.text
+    )
 
     assert response.error_text == ""
     assert len(response.matched_rows) == 1
@@ -2034,7 +2197,10 @@ def test_preview_uses_room_specific_downlight_counts(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 8
     assert response.matched_rows[0].NeedsReview is True
-    assert any("downlight counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "downlight counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_ducted_extractor_counts(monkeypatch) -> None:
@@ -2082,7 +2248,10 @@ def test_preview_uses_room_specific_ducted_extractor_counts(monkeypatch) -> None
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 1
     assert response.matched_rows[0].NeedsReview is True
-    assert any("ducted extractor counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "ducted extractor counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_room_specific_hardwired_appliance_counts(monkeypatch) -> None:
@@ -2130,7 +2299,10 @@ def test_preview_uses_room_specific_hardwired_appliance_counts(monkeypatch) -> N
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 3
     assert response.matched_rows[0].NeedsReview is True
-    assert any("hardwired appliance counts" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "hardwired appliance counts" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_assigns_section_metadata_and_boarding_takeoff(monkeypatch) -> None:
@@ -2232,7 +2404,11 @@ def test_preview_uses_derived_insulation_takeoff(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 36
     assert response.matched_rows[0].NeedsReview is True
-    assert "derived insulation coverage" in " ".join(assumption.text.lower() for assumption in response.assumptions if assumption.text)
+    assert "derived insulation coverage" in " ".join(
+        assumption.text.lower()
+        for assumption in response.assumptions
+        if assumption.text
+    )
 
 
 def test_preview_uses_extension_flat_roof_takeoff(monkeypatch) -> None:
@@ -2282,7 +2458,10 @@ def test_preview_uses_extension_flat_roof_takeoff(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 11.2
     assert response.matched_rows[0].NeedsReview is True
-    assert any("rear extension flat-roof area" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "rear extension flat-roof area" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_extension_wall_takeoff(monkeypatch) -> None:
@@ -2330,7 +2509,10 @@ def test_preview_uses_extension_wall_takeoff(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 20.2
     assert response.matched_rows[0].NeedsReview is True
-    assert any("rear extension external wall area" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "rear extension external wall area" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_whole_property_electrical_second_fix_takeoff(monkeypatch) -> None:
@@ -2382,7 +2564,11 @@ def test_preview_uses_whole_property_electrical_second_fix_takeoff(monkeypatch) 
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 40
     assert response.matched_rows[0].NeedsReview is True
-    assert any("whole-property electrical second-fix allowances" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "whole-property electrical second-fix allowances"
+        in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_preview_uses_derived_loft_roof_finish_takeoff(monkeypatch) -> None:
@@ -2435,7 +2621,10 @@ def test_preview_uses_derived_loft_roof_finish_takeoff(monkeypatch) -> None:
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].QUANTITY == 45.75
     assert response.matched_rows[0].NeedsReview is True
-    assert any("loft / dormer roof finish area" in (assumption.text or "").lower() for assumption in response.assumptions)
+    assert any(
+        "loft / dormer roof finish area" in (assumption.text or "").lower()
+        for assumption in response.assumptions
+    )
 
 
 def test_segment_aware_shortlist_keeps_large_mixed_scope_coverage() -> None:
@@ -2557,8 +2746,12 @@ def test_segment_aware_shortlist_keeps_large_mixed_scope_coverage() -> None:
         "replace sockets 8 pc, reconnect sink 1 ea, tile splashback 8 m2"
     )
 
-    shortlist_input = [CandidateRow.model_validate(row) for row in (relevant_rows + candidate_rows)]
-    shortlisted = shortlist_candidates(prompt, shortlist_input, limit=12, per_segment_limit=3)
+    shortlist_input = [
+        CandidateRow.model_validate(row) for row in (relevant_rows + candidate_rows)
+    ]
+    shortlisted = shortlist_candidates(
+        prompt, shortlist_input, limit=12, per_segment_limit=3
+    )
     shortlisted_ids = {row.INSIDEQUOTESGUID for row in shortlisted}
 
     assert {
@@ -2628,7 +2821,9 @@ def test_preview_user_payload_includes_scope_summary_and_norm_basis() -> None:
     assert "Ground Floor: Kitchen 14.4 m2" in payload["scope_summary_text"]
 
 
-def test_preview_user_payload_includes_active_scope_sections_and_group_alias_scope_hints() -> None:
+def test_preview_user_payload_includes_active_scope_sections_and_group_alias_scope_hints() -> (
+    None
+):
     prompt = (
         "PROPERTY:\n"
         "Type: Flat\n"
@@ -2685,7 +2880,10 @@ def test_preview_user_payload_includes_active_scope_sections_and_group_alias_sco
     assert payload["candidate_rows"][0]["wc"] == "DEC-01"
     assert payload["candidate_rows"][0]["ss"] == "decorating"
     assert payload["candidate_rows"][1]["ss"] == "flooring"
-    assert {section["title"] for section in payload["active_scope_sections"]} == {"Decorating", "Flooring"}
+    assert {section["title"] for section in payload["active_scope_sections"]} == {
+        "Decorating",
+        "Flooring",
+    }
 
 
 def test_preview_user_payload_can_include_accepted_examples() -> None:
@@ -2727,7 +2925,9 @@ def test_preview_user_payload_can_include_accepted_examples() -> None:
         ],
     )
 
-    assert payload["accepted_examples"][0]["prompt_template_title"] == "Kitchen baseline"
+    assert (
+        payload["accepted_examples"][0]["prompt_template_title"] == "Kitchen baseline"
+    )
     assert payload["accepted_examples"][0]["accepted_rows"][0]["quantity"] == 42
 
 
@@ -2804,8 +3004,12 @@ def test_preview_user_payload_includes_guardrails_and_scope_hints() -> None:
         extracted_scope,
     )
 
-    joinery_row = next(row for row in payload["candidate_rows"] if row["id"] == "joinery-row")
-    electrical_row = next(row for row in payload["candidate_rows"] if row["id"] == "electrical-row")
+    joinery_row = next(
+        row for row in payload["candidate_rows"] if row["id"] == "joinery-row"
+    )
+    electrical_row = next(
+        row for row in payload["candidate_rows"] if row["id"] == "electrical-row"
+    )
 
     assert joinery_row["gc"] == "review_required_specialist_scope"
     assert joinery_row["gd"] == "Bespoke joinery needs manual pricing review."
@@ -2817,12 +3021,18 @@ def test_preview_user_payload_includes_guardrails_and_scope_hints() -> None:
 def test_preview_system_prompt_includes_norm_basis_and_bathroom_examples() -> None:
     prompt_text = build_preview_system_prompt()
 
-    assert 'work_qty_norm_basis example: if a "Paint walls" row has work_qty_norm_basis=14.4' in prompt_text
+    assert (
+        'work_qty_norm_basis example: if a "Paint walls" row has work_qty_norm_basis=14.4'
+        in prompt_text
+    )
     assert "Install WC" in prompt_text
     assert "Full-height wall tiling to bathroom" in prompt_text
     assert "Solar panels are not mentioned in the scope." in prompt_text
     assert '"NeedsReview": true' in prompt_text
-    assert "Gas Safe registered engineer required. Confirm pricing separately." in prompt_text
+    assert (
+        "Gas Safe registered engineer required. Confirm pricing separately."
+        in prompt_text
+    )
 
 
 def test_shortlist_expands_demolition_synonyms_for_removal_scope() -> None:
@@ -2863,7 +3073,12 @@ def test_shortlist_expands_demolition_synonyms_for_removal_scope() -> None:
         ),
     ]
 
-    shortlisted = shortlist_candidates("Demolish internal partition wall 12 m2", shortlist_input, limit=3, per_segment_limit=2)
+    shortlisted = shortlist_candidates(
+        "Demolish internal partition wall 12 m2",
+        shortlist_input,
+        limit=3,
+        per_segment_limit=2,
+    )
 
     assert shortlisted[0].INSIDEQUOTESGUID == "remove-partition"
 
@@ -2906,7 +3121,9 @@ def test_shortlist_demotes_kitchen_unit_removal_for_internal_wall_scope() -> Non
         ),
     ]
 
-    shortlisted = shortlist_candidates("Remove internal walls 15 lm", shortlist_input, limit=2, per_segment_limit=2)
+    shortlisted = shortlist_candidates(
+        "Remove internal walls 15 lm", shortlist_input, limit=2, per_segment_limit=2
+    )
 
     assert shortlisted[0].INSIDEQUOTESGUID == "remove-partition"
 
@@ -2949,7 +3166,12 @@ def test_shortlist_expands_install_and_heating_synonyms() -> None:
         ),
     ]
 
-    shortlisted = shortlist_candidates("Heating plant replacement, fit new radiator 2 pcs", shortlist_input, limit=3, per_segment_limit=2)
+    shortlisted = shortlist_candidates(
+        "Heating plant replacement, fit new radiator 2 pcs",
+        shortlist_input,
+        limit=3,
+        per_segment_limit=2,
+    )
 
     assert shortlisted[0].INSIDEQUOTESGUID == "install-radiator"
 
@@ -2992,7 +3214,12 @@ def test_shortlist_matches_heating_plant_to_combi_boiler_supply_and_fit() -> Non
         ),
     ]
 
-    shortlisted = shortlist_candidates("Heating plant replacement with new boiler installation", shortlist_input, limit=2, per_segment_limit=2)
+    shortlisted = shortlist_candidates(
+        "Heating plant replacement with new boiler installation",
+        shortlist_input,
+        limit=2,
+        per_segment_limit=2,
+    )
 
     assert shortlisted[0].INSIDEQUOTESGUID == "boiler-fit"
 
@@ -3047,8 +3274,12 @@ def test_shortlist_guarantees_minimum_rows_for_active_sections() -> None:
         per_segment_limit=4,
     )
 
-    electrical_count = sum(1 for row in shortlisted if row.WorkGroupName == "Electrical")
-    decorating_count = sum(1 for row in shortlisted if row.WorkGroupName == "Decorating")
+    electrical_count = sum(
+        1 for row in shortlisted if row.WorkGroupName == "Electrical"
+    )
+    decorating_count = sum(
+        1 for row in shortlisted if row.WorkGroupName == "Decorating"
+    )
     assert electrical_count >= 8
     assert decorating_count >= 8
 
@@ -3104,7 +3335,9 @@ def test_shortlist_guarantees_minimum_rows_for_alias_group_sections() -> None:
     )
 
     electrical_count = sum(1 for row in shortlisted if row.WorkGroupName == "Electrics")
-    decorating_count = sum(1 for row in shortlisted if row.WorkGroupName == "Decorations")
+    decorating_count = sum(
+        1 for row in shortlisted if row.WorkGroupName == "Decorations"
+    )
     assert electrical_count >= 8
     assert decorating_count >= 8
 
@@ -3159,7 +3392,9 @@ def test_shortlist_allows_more_rows_from_active_section_groups() -> None:
         per_segment_limit=4,
     )
 
-    electrical_count = sum(1 for row in shortlisted if row.WorkGroupName == "Electrical")
+    electrical_count = sum(
+        1 for row in shortlisted if row.WorkGroupName == "Electrical"
+    )
     assert electrical_count > 20
 
 
@@ -3244,7 +3479,9 @@ def test_dynamic_shortlist_limit_scales_with_large_candidate_sets() -> None:
         "FLOORING:\nLay engineered floor"
     )
 
-    assert app_matcher._resolve_shortlist_limit(prompt, None, candidate_count=1000) == 305
+    assert (
+        app_matcher._resolve_shortlist_limit(prompt, None, candidate_count=1000) == 305
+    )
 
 
 def test_budget_fit_trims_large_normalized_preview_payload() -> None:
@@ -3310,7 +3547,9 @@ def test_budget_fit_trims_large_normalized_preview_payload() -> None:
     )
 
 
-def test_fit_accepted_examples_to_budget_can_drop_examples_to_preserve_shortlist() -> None:
+def test_fit_accepted_examples_to_budget_can_drop_examples_to_preserve_shortlist() -> (
+    None
+):
     normalized_prompt = (
         "PROPERTY:\n"
         "Type: First floor flat\n\n"
@@ -3349,7 +3588,11 @@ def test_fit_accepted_examples_to_budget_can_drop_examples_to_preserve_shortlist
     accepted_examples = [
         PreviewAcceptedExample.model_validate(
             {
-                "prompt": "Structured prompt example " + ("boiler and electrical scope with sequencing, client-supply notes and room breakdown " * 180),
+                "prompt": "Structured prompt example "
+                + (
+                    "boiler and electrical scope with sequencing, client-supply notes and room breakdown "
+                    * 180
+                ),
                 "prompt_template_title": "Heating baseline",
                 "accepted_rows": [
                     PreviewAcceptedExampleRow.model_validate(
@@ -3367,7 +3610,11 @@ def test_fit_accepted_examples_to_budget_can_drop_examples_to_preserve_shortlist
         ),
         PreviewAcceptedExample.model_validate(
             {
-                "prompt": "Structured prompt example " + ("bathroom and flooring scope with UFH zones, tile allowances and electrical points " * 180),
+                "prompt": "Structured prompt example "
+                + (
+                    "bathroom and flooring scope with UFH zones, tile allowances and electrical points "
+                    * 180
+                ),
                 "prompt_template_title": "Bathroom baseline",
                 "accepted_rows": [
                     PreviewAcceptedExampleRow.model_validate(
@@ -3426,7 +3673,9 @@ def test_match_row_to_extracted_section_prefers_candidate_section_aliases() -> N
         }
     )
 
-    section_match = match_row_to_extracted_section(row, extracted_scope, "General: 6 switches")
+    section_match = match_row_to_extracted_section(
+        row, extracted_scope, "General: 6 switches"
+    )
 
     assert section_match is not None
     assert section_match.key == "electrical"
@@ -3442,7 +3691,9 @@ def test_build_extracted_scope_logs_parser_failures(monkeypatch, caplog) -> None
         extracted_scope = app_matcher._build_extracted_scope("DEMOLITION:\nStrip out")
 
     assert extracted_scope is None
-    assert "Structured scope extraction failed during preview generation." in caplog.text
+    assert (
+        "Structured scope extraction failed during preview generation." in caplog.text
+    )
     assert "parser exploded" in caplog.text
 
 
@@ -3473,7 +3724,9 @@ def test_direct_scope_support_allows_generic_rows_without_significant_tokens() -
     )
 
 
-def test_llm_preview_recovers_missing_quantity_from_takeoff_before_validation(monkeypatch) -> None:
+def test_llm_preview_recovers_missing_quantity_from_takeoff_before_validation(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
     reload(app_config)
@@ -3502,7 +3755,14 @@ def test_llm_preview_recovers_missing_quantity_from_takeoff_before_validation(mo
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3569,7 +3829,11 @@ def test_preview_eval_cases(monkeypatch, case) -> None:
     response = generate_preview(request)
 
     matched_ids = [row.INSIDEQUOTESGUID for row in response.matched_rows]
-    warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning")
+    warning_text = " ".join(
+        assumption.text
+        for assumption in response.assumptions
+        if assumption.severity == "warning"
+    )
 
     assert set(matched_ids) == set(case["expected_matched_ids"])
     if "expected_unmatched_count" in case:
@@ -3623,8 +3887,16 @@ def test_llm_preview_skips_invalid_guid_row_instead_of_crashing(monkeypatch) -> 
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
+
             return LLMPreviewOutput.model_validate(fake_llm_output)
 
     # Patch AFTER reload so the patch is not wiped by reload.
@@ -3692,7 +3964,14 @@ def test_llm_preview_rejects_rows_without_direct_scope_support(monkeypatch) -> N
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3728,7 +4007,10 @@ def test_llm_preview_rejects_rows_without_direct_scope_support(monkeypatch) -> N
     assert len(response.unmatched_items) == 1
     assert response.unmatched_items[0].source_text == "Install handrail"
     assert "not directly supported" in response.unmatched_items[0].reason.lower()
-    assert any(assumption.kind == "scope_support_missing" for assumption in response.assumptions)
+    assert any(
+        assumption.kind == "scope_support_missing"
+        for assumption in response.assumptions
+    )
 
 
 def test_llm_preview_forces_do_not_include_rows_to_unmatched(monkeypatch) -> None:
@@ -3760,7 +4042,14 @@ def test_llm_preview_forces_do_not_include_rows_to_unmatched(monkeypatch) -> Non
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3800,7 +4089,9 @@ def test_llm_preview_forces_do_not_include_rows_to_unmatched(monkeypatch) -> Non
     assert "guardrail excluded" in response.assumptions[0].text.lower()
 
 
-def test_llm_preview_forces_review_for_human_guardrail_status_labels(monkeypatch) -> None:
+def test_llm_preview_forces_review_for_human_guardrail_status_labels(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
     reload(app_config)
@@ -3829,7 +4120,14 @@ def test_llm_preview_forces_review_for_human_guardrail_status_labels(monkeypatch
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -3865,8 +4163,13 @@ def test_llm_preview_forces_review_for_human_guardrail_status_labels(monkeypatch
     assert len(response.matched_rows) == 1
     assert response.matched_rows[0].NeedsReview is True
     assert response.matched_rows[0].Confidence == 0.74
-    assert "pricing review due to guardrail status" in (response.matched_rows[0].ReviewReason or "").lower()
-    assert any(assumption.kind == "guardrail_review" for assumption in response.assumptions)
+    assert (
+        "pricing review due to guardrail status"
+        in (response.matched_rows[0].ReviewReason or "").lower()
+    )
+    assert any(
+        assumption.kind == "guardrail_review" for assumption in response.assumptions
+    )
 
 
 def test_llm_preview_fallback_captures_retry_telemetry(monkeypatch) -> None:
@@ -3889,7 +4192,14 @@ def test_llm_preview_fallback_captures_retry_telemetry(monkeypatch) -> None:
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             raise ValueError("Structured output parse failed twice.")
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
@@ -3947,7 +4257,14 @@ def test_llm_preview_does_not_silent_fallback_outside_local(monkeypatch) -> None
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             raise ValueError("Structured output parse failed twice.")
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
@@ -3978,7 +4295,9 @@ def test_llm_preview_does_not_silent_fallback_outside_local(monkeypatch) -> None
         app_matcher.generate_preview(request)
 
 
-def test_llm_preview_uses_marked_fallback_for_normalized_intake_in_local(monkeypatch) -> None:
+def test_llm_preview_uses_marked_fallback_for_normalized_intake_in_local(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("APP_ENV", "local")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
@@ -3998,7 +4317,14 @@ def test_llm_preview_uses_marked_fallback_for_normalized_intake_in_local(monkeyp
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             raise ValueError("Structured output parse failed.")
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
@@ -4052,12 +4378,15 @@ def test_llm_preview_uses_marked_fallback_for_normalized_intake_in_local(monkeyp
     assert response.telemetry.rule_version == "2026-04-27"
     assert response.telemetry.runtime_source == "code_defaults"
     assert any(
-        assumption.kind == "normalized_service_fallback" and "heuristic fallback mode" in (assumption.text or "").lower()
+        assumption.kind == "normalized_service_fallback"
+        and "heuristic fallback mode" in (assumption.text or "").lower()
         for assumption in response.assumptions
     )
 
 
-def test_llm_preview_retries_with_smaller_shortlist_after_token_budget_error(monkeypatch) -> None:
+def test_llm_preview_retries_with_smaller_shortlist_after_token_budget_error(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("APP_ENV", "local")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
@@ -4096,7 +4425,14 @@ def test_llm_preview_retries_with_smaller_shortlist_after_token_budget_error(mon
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
 
             preview_calls.append(len(candidate_rows))
@@ -4108,7 +4444,9 @@ def test_llm_preview_retries_with_smaller_shortlist_after_token_budget_error(mon
             return LLMPreviewOutput.model_validate(fake_llm_output)
 
     monkeypatch.setattr(app_matcher, "LLMClient", lambda: FakeClient())
-    monkeypatch.setattr(app_matcher, "_resolve_shortlist_limit", lambda *args, **kwargs: 220)
+    monkeypatch.setattr(
+        app_matcher, "_resolve_shortlist_limit", lambda *args, **kwargs: 220
+    )
     monkeypatch.setattr(app_matcher, "_PREVIEW_ROUGH_TOKEN_BUDGET", 999999)
     monkeypatch.setattr(app_matcher, "_PREVIEW_ROUGH_CHAR_BUDGET", 999999 * 4)
 
@@ -4156,7 +4494,9 @@ def test_llm_preview_retries_with_smaller_shortlist_after_token_budget_error(mon
     assert response.service_mode == "llm"
     assert preview_calls[0] == 220
     assert preview_calls[1] < preview_calls[0]
-    assert any(assumption.kind == "token_budget_trim" for assumption in response.assumptions)
+    assert any(
+        assumption.kind == "token_budget_trim" for assumption in response.assumptions
+    )
 
 
 def test_direct_scope_support_keeps_real_construction_terms() -> None:
@@ -4186,7 +4526,9 @@ def test_direct_scope_support_keeps_real_construction_terms() -> None:
     )
 
 
-def test_llm_preview_reports_missing_quantity_with_human_readable_unmatched_item(monkeypatch) -> None:
+def test_llm_preview_reports_missing_quantity_with_human_readable_unmatched_item(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
     reload(app_config)
@@ -4215,7 +4557,14 @@ def test_llm_preview_reports_missing_quantity_with_human_readable_unmatched_item
         def is_enabled(self) -> bool:
             return True
 
-        def preview_match(self, prompt, candidate_rows, extracted_scope=None, accepted_examples=None, document_context=None):
+        def preview_match(
+            self,
+            prompt,
+            candidate_rows,
+            extracted_scope=None,
+            accepted_examples=None,
+            document_context=None,
+        ):
             from app.schemas import LLMPreviewOutput
 
             return LLMPreviewOutput.model_validate(fake_llm_output)
@@ -4249,7 +4598,9 @@ def test_llm_preview_reports_missing_quantity_with_human_readable_unmatched_item
     assert response.matched_rows == []
     assert response.unmatched_items[0].source_text == "Wall tiling"
     assert "quantity" in response.unmatched_items[0].reason.lower()
-    assert any(assumption.kind == "quantity_missing" for assumption in response.assumptions)
+    assert any(
+        assumption.kind == "quantity_missing" for assumption in response.assumptions
+    )
 
 
 def test_llm_client_falls_back_to_chat_parse_when_responses_api_is_missing() -> None:
@@ -4324,4 +4675,7 @@ def test_llm_client_falls_back_to_chat_parse_when_responses_api_is_missing() -> 
     )
 
     assert response.matched_rows[0].INSIDEQUOTESGUID == "inside-1"
-    assert client.last_preview_metadata["structured_output_mode"] == "chat.completions.parse"
+    assert (
+        client.last_preview_metadata["structured_output_mode"]
+        == "chat.completions.parse"
+    )

@@ -34,7 +34,8 @@ Return ONLY valid JSON, no markdown fences:
 
 # ── Floor plan ─────────────────────────────────────────────────────────────────
 
-_FLOOR_PLAN_PROMPT = """\
+_FLOOR_PLAN_PROMPT = (
+    """\
 You are analysing a floor plan from a UK residential architectural or structural drawing package.
 
 A floor plan shows the building layout from above. You will see:
@@ -75,11 +76,14 @@ Your job — extract every piece of information visible:
 6. structural_notes: Any structural or material specs visible (wall types, floor build-up, etc.)
 
 7. uncertainties: Any room label or dimension that is unclear or partially hidden
-""" + _JSON_SCHEMA
+"""
+    + _JSON_SCHEMA
+)
 
 # ── Structural drawing ─────────────────────────────────────────────────────────
 
-_STRUCTURAL_DRAWING_PROMPT = """\
+_STRUCTURAL_DRAWING_PROMPT = (
+    """\
 You are analysing a structural engineering drawing from a UK residential project.
 
 Structural drawings contain:
@@ -117,11 +121,14 @@ Your job — transcribe the schedules completely. Every row matters.
    Padstone dimensions. Bolt sizes and spacings.
 
 7. uncertainties: Schedule rows that are illegible, split across pages, or partially visible
-""" + _JSON_SCHEMA
+"""
+    + _JSON_SCHEMA
+)
 
 # ── Structural calculations ────────────────────────────────────────────────────
 
-_STRUCTURAL_CALC_PROMPT = """\
+_STRUCTURAL_CALC_PROMPT = (
+    """\
 You are analysing a structural engineering calculation page from a UK residential project.
 
 Structural calculations contain:
@@ -150,11 +157,14 @@ Your job — extract all numerical values and their engineering context.
    Format: "Beam B1: DL=5.2kN/m, IL=3.0kN/m, design moment=24.5kNm, capacity=31.2kNm PASS"
 
 7. uncertainties: Anything illegible or cut off
-""" + _JSON_SCHEMA
+"""
+    + _JSON_SCHEMA
+)
 
 # ── Section / elevation ────────────────────────────────────────────────────────
 
-_SECTION_ELEVATION_PROMPT = """\
+_SECTION_ELEVATION_PROMPT = (
+    """\
 You are analysing a section or elevation drawing from a UK residential architectural package.
 
 Section drawings (vertical cut through the building) show:
@@ -192,11 +202,14 @@ Your job — extract every height, level, and dimension visible.
    insulation thickness, floor build-up specification).
 
 7. uncertainties: Any level or dimension that is unclear
-""" + _JSON_SCHEMA
+"""
+    + _JSON_SCHEMA
+)
 
 # ── Schedule (door / window / finish / room data) ──────────────────────────────
 
-_SCHEDULE_PROMPT = """\
+_SCHEDULE_PROMPT = (
+    """\
 You are analysing a schedule drawing from a UK residential architectural package.
 Schedules include: door schedules, window schedules, finish schedules, room data sheets.
 
@@ -222,11 +235,14 @@ Your job — transcribe the schedule table completely.
 6. structural_notes: Any specification notes (fire rating, acoustic rating, ironmongery, finish spec)
 
 7. uncertainties: Any illegible cells or references
-""" + _JSON_SCHEMA
+"""
+    + _JSON_SCHEMA
+)
 
 # ── Generic fallback ───────────────────────────────────────────────────────────
 
-_OTHER_PROMPT = """\
+_OTHER_PROMPT = (
+    """\
 You are analysing a page from a UK residential construction drawing package.
 
 Identify what type of page this is and extract all visible information.
@@ -246,7 +262,9 @@ Identify what type of page this is and extract all visible information.
 6. structural_notes: Any structural or material specifications
 
 7. uncertainties: Anything unclear, illegible, or ambiguous
-""" + _JSON_SCHEMA
+"""
+    + _JSON_SCHEMA
+)
 
 # ── Prompt selection ───────────────────────────────────────────────────────────
 
@@ -299,6 +317,7 @@ def _parse_llm_json(content: str) -> dict:
 
 # ── Main entry point ───────────────────────────────────────────────────────────
 
+
 def enrich_page_with_vision(
     page_image_base64: str,
     page_number: int,
@@ -320,13 +339,20 @@ def enrich_page_with_vision(
 
     context_lines: list[str] = []
     if existing_rooms:
-        room_names = ", ".join(r.get("name", "") for r in existing_rooms if r.get("name"))
+        room_names = ", ".join(
+            r.get("name", "") for r in existing_rooms if r.get("name")
+        )
         if room_names:
             context_lines.append(f"Previously found rooms (partial): {room_names}")
     if existing_notes:
-        context_lines.append(f"Previously found notes (partial): {'; '.join(existing_notes[:5])}")
+        context_lines.append(
+            f"Previously found notes (partial): {'; '.join(existing_notes[:5])}"
+        )
     if context_lines:
-        prompt_text += "\n\nContext from earlier programmatic extraction:\n" + "\n".join(context_lines)
+        prompt_text += (
+            "\n\nContext from earlier programmatic extraction:\n"
+            + "\n".join(context_lines)
+        )
 
     try:
         from openai import OpenAI
@@ -362,7 +388,11 @@ def enrich_page_with_vision(
         latency_ms = int((perf_counter() - started_at) * 1000)
         logger.info(
             "Vision enrichment p%s of '%s' (type=%s) — model=%s latency=%dms",
-            page_number, source_file, page_type, model, latency_ms,
+            page_number,
+            source_file,
+            page_type,
+            model,
+            latency_ms,
         )
 
         content = response.choices[0].message.content or "{}"
@@ -375,7 +405,10 @@ def enrich_page_with_vision(
 
     except Exception as exc:
         logger.warning(
-            "Vision enrichment failed for p%s of '%s': %s", page_number, source_file, exc
+            "Vision enrichment failed for p%s of '%s': %s",
+            page_number,
+            source_file,
+            exc,
         )
         return _fallback(str(exc))
 

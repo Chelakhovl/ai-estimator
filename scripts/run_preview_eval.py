@@ -45,17 +45,25 @@ def main() -> int:
         )
         response = generate_preview(request)
         matched_ids = [row.INSIDEQUOTESGUID for row in response.matched_rows]
-        warning_text = " ".join(assumption.text for assumption in response.assumptions if assumption.severity == "warning")
+        warning_text = " ".join(
+            assumption.text
+            for assumption in response.assumptions
+            if assumption.severity == "warning"
+        )
 
         checks: list[tuple[str, bool]] = [
             ("matched_ids", set(matched_ids) == set(case["expected_matched_ids"])),
             (
                 "unmatched_count",
-                len(response.unmatched_items) == case.get("expected_unmatched_count", len(response.unmatched_items)),
+                len(response.unmatched_items)
+                == case.get("expected_unmatched_count", len(response.unmatched_items)),
             ),
             (
                 "review_count",
-                response.review_summary.review_count == case.get("expected_review_count", response.review_summary.review_count),
+                response.review_summary.review_count
+                == case.get(
+                    "expected_review_count", response.review_summary.review_count
+                ),
             ),
         ]
         for fragment in case.get("expected_warning_contains", []):
@@ -68,9 +76,15 @@ def main() -> int:
             continue
 
         print(f"FAIL {case['name']}")
-        print(f"  matched_ids:   actual={matched_ids} expected={case['expected_matched_ids']}")
-        print(f"  unmatched:     actual={len(response.unmatched_items)} expected={case.get('expected_unmatched_count')}")
-        print(f"  review_count:  actual={response.review_summary.review_count} expected={case.get('expected_review_count')}")
+        print(
+            f"  matched_ids:   actual={matched_ids} expected={case['expected_matched_ids']}"
+        )
+        print(
+            f"  unmatched:     actual={len(response.unmatched_items)} expected={case.get('expected_unmatched_count')}"
+        )
+        print(
+            f"  review_count:  actual={response.review_summary.review_count} expected={case.get('expected_review_count')}"
+        )
         print(f"  warnings:      {warning_text}")
 
     print(f"\nSummary: {passed}/{len(cases)} cases passed")

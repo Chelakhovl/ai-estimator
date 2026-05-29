@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from app.schemas import CandidateRow, ExtractedRoomTakeoff, ExtractedSection, PreviewAssumption, ScopeExtractionResponse
+from app.schemas import (
+    CandidateRow,
+    ExtractedRoomTakeoff,
+    ExtractedSection,
+    PreviewAssumption,
+    ScopeExtractionResponse,
+)
 from app.services.normalizer import detect_area, normalize_unit, tokenize
 from app.services.scope_parsing import infer_section_keys_from_label
 
@@ -27,23 +33,91 @@ class SectionAssemblyMatch:
 _NON_ACTION_SECTION_KEYS = {"property", "full_scope", "floor_areas_rooms"}
 _SECTION_HINT_TOKENS: dict[str, set[str]] = {
     "demolition": {"strip", "remove", "demolition", "demo", "break", "clear"},
-    "groundworks": {"foundation", "ground", "concrete", "excavate", "soil", "patio", "driveway", "trench"},
+    "groundworks": {
+        "foundation",
+        "ground",
+        "concrete",
+        "excavate",
+        "soil",
+        "patio",
+        "driveway",
+        "trench",
+    },
     "steelworks": {"steel", "beam", "column", "post", "junction", "connection"},
-    "structure": {"structure", "slab", "roof", "wall", "brick", "block", "dormer", "skylight", "cheek", "parapet", "upstand", "trim", "fascia", "soffit", "coping"},
+    "structure": {
+        "structure",
+        "slab",
+        "roof",
+        "wall",
+        "brick",
+        "block",
+        "dormer",
+        "skylight",
+        "cheek",
+        "parapet",
+        "upstand",
+        "trim",
+        "fascia",
+        "soffit",
+        "coping",
+    },
     "carpentry": {"carpentry", "stud", "timber", "chipboard", "joist", "frame"},
-    "ceilings_and_insulation": {"ceiling", "plasterboard", "board", "insulation", "pir", "acoustic", "rafter"},
+    "ceilings_and_insulation": {
+        "ceiling",
+        "plasterboard",
+        "board",
+        "insulation",
+        "pir",
+        "acoustic",
+        "rafter",
+    },
     "doors": {"door", "frame", "pocket"},
     "joinery": {"joinery", "stair", "storage", "cupboard"},
     "plastering": {"plaster", "skim", "render"},
     "tiling": {"tile", "grout", "splashback"},
     "plumbing": {"plumb", "radiator", "basin", "toilet", "bath", "shower", "ufh"},
     "heating": {"boiler", "megaflo", "cylinder", "heating", "gas"},
-    "electrical": {"electric", "socket", "switch", "downlight", "spotlight", "extractor", "consumer", "rewire", "hardwire", "duct", "outlet", "fitting", "thermostat", "appliance", "oven", "hob"},
+    "electrical": {
+        "electric",
+        "socket",
+        "switch",
+        "downlight",
+        "spotlight",
+        "extractor",
+        "consumer",
+        "rewire",
+        "hardwire",
+        "duct",
+        "outlet",
+        "fitting",
+        "thermostat",
+        "appliance",
+        "oven",
+        "hob",
+    },
     "decorating": {"decorate", "paint", "mist", "coat"},
-    "flooring": {"floor", "laminate", "engineered", "timber", "carpet", "vinyl", "wood"},
+    "flooring": {
+        "floor",
+        "laminate",
+        "engineered",
+        "timber",
+        "carpet",
+        "vinyl",
+        "wood",
+    },
     "windows": {"window", "velux", "glazing"},
     "woodwork_painting": {"skirting", "architrave", "stair", "woodwork", "door"},
-    "preliminaries": {"prelim", "protection", "toilet", "welfare", "management", "delivery", "site", "wait", "load"},
+    "preliminaries": {
+        "prelim",
+        "protection",
+        "toilet",
+        "welfare",
+        "management",
+        "delivery",
+        "site",
+        "wait",
+        "load",
+    },
 }
 
 
@@ -66,18 +140,30 @@ def build_scope_matching_context(extracted_scope: ScopeExtractionResponse) -> st
     return ", ".join(part for part in parts if part)
 
 
-def is_extracted_context_segment(segment: str, extracted_scope: ScopeExtractionResponse) -> bool:
+def is_extracted_context_segment(
+    segment: str, extracted_scope: ScopeExtractionResponse
+) -> bool:
     normalized_segment = segment.strip().lower().rstrip(":")
     if not normalized_segment:
         return True
 
-    if normalized_segment in {"ground floor", "first floor", "loft", "allowance", "radiators"}:
+    if normalized_segment in {
+        "ground floor",
+        "first floor",
+        "loft",
+        "allowance",
+        "radiators",
+    }:
         return True
 
-    if normalized_segment in {section.title.lower() for section in extracted_scope.sections}:
+    if normalized_segment in {
+        section.title.lower() for section in extracted_scope.sections
+    }:
         return True
 
-    if normalized_segment in {scope.lower() for scope in extracted_scope.property_context.project_scopes}:
+    if normalized_segment in {
+        scope.lower() for scope in extracted_scope.property_context.project_scopes
+    }:
         return True
 
     for room in extracted_scope.rooms:
@@ -94,7 +180,11 @@ def is_extracted_context_segment(segment: str, extracted_scope: ScopeExtractionR
             if not suffix or is_dimension_suffix:
                 return True
         if room_name in normalized_segment and bool(
-            re.search(r"\d+(?:\.\d+)?\s*[×x]\s*\d+(?:\.\d+)?", normalized_segment, re.IGNORECASE)
+            re.search(
+                r"\d+(?:\.\d+)?\s*[×x]\s*\d+(?:\.\d+)?",
+                normalized_segment,
+                re.IGNORECASE,
+            )
         ):
             return True
 
@@ -126,7 +216,9 @@ def _section_token_set(section: ExtractedSection) -> set[str]:
     return tokenize(" ".join(part for part in parts if part))
 
 
-def _build_assumption(work_name: str, quantity: float, reason: str, severity: str = "info") -> PreviewAssumption:
+def _build_assumption(
+    work_name: str, quantity: float, reason: str, severity: str = "info"
+) -> PreviewAssumption:
     return PreviewAssumption(
         text=f"Quantity for '{work_name}' was derived from the structured scope takeoff: {quantity:g}. {reason}",
         kind="takeoff_quantity",
@@ -180,8 +272,14 @@ def _wet_room_matches(rooms: list[ExtractedRoomTakeoff]) -> list[ExtractedRoomTa
     return [room for room in rooms if room.room_type in {"bathroom", "ensuite", "wc"}]
 
 
-def _plumbing_room_matches(rooms: list[ExtractedRoomTakeoff]) -> list[ExtractedRoomTakeoff]:
-    return [room for room in rooms if room.room_type in {"bathroom", "ensuite", "wc", "kitchen", "utility"}]
+def _plumbing_room_matches(
+    rooms: list[ExtractedRoomTakeoff],
+) -> list[ExtractedRoomTakeoff]:
+    return [
+        room
+        for room in rooms
+        if room.room_type in {"bathroom", "ensuite", "wc", "kitchen", "utility"}
+    ]
 
 
 def _sum_room_metric(rooms: list[ExtractedRoomTakeoff], field_name: str) -> float:
@@ -247,7 +345,9 @@ def match_row_to_extracted_section(
         section_tokens = _section_token_set(section)
         if not section_tokens:
             continue
-        score = float(len(row_tokens & section_tokens) * 2 + len(segment_tokens & section_tokens))
+        score = float(
+            len(row_tokens & section_tokens) * 2 + len(segment_tokens & section_tokens)
+        )
         hint_tokens = _SECTION_HINT_TOKENS.get(section.key, set())
         if hint_tokens and row_tokens & hint_tokens:
             score += 2
@@ -283,7 +383,20 @@ def suggest_quantity_from_takeoff(
         unit == "pcs"
         and summary.client_supply_sanitaryware
         and "supply" in tokens
-        and any(token in tokens for token in {"sanitary", "sanitaryware", "wc", "toilet", "basin", "bath", "shower", "sink", "vanity"})
+        and any(
+            token in tokens
+            for token in {
+                "sanitary",
+                "sanitaryware",
+                "wc",
+                "toilet",
+                "basin",
+                "bath",
+                "shower",
+                "sink",
+                "vanity",
+            }
+        )
     ):
         quantity = (
             _sum_room_metric(matched_wet_rooms, "estimated_sanitary_set_count")
@@ -310,7 +423,18 @@ def suggest_quantity_from_takeoff(
         and "supply" in tokens
         and any(
             token in tokens
-            for token in {"appliance", "appliances", "oven", "hob", "extractor", "dishwasher", "fridge", "freezer", "washing", "dryer"}
+            for token in {
+                "appliance",
+                "appliances",
+                "oven",
+                "hob",
+                "extractor",
+                "dishwasher",
+                "fridge",
+                "freezer",
+                "washing",
+                "dryer",
+            }
         )
     ):
         return TakeoffSuggestion(
@@ -326,7 +450,13 @@ def suggest_quantity_from_takeoff(
         )
 
     if unit == "m2" and not matched_rooms:
-        if any(token in tokens for token in {"engineered", "laminate", "vinyl", "timber", "wood"}) and summary.estimated_hard_floor_scope_area_m2:
+        if (
+            any(
+                token in tokens
+                for token in {"engineered", "laminate", "vinyl", "timber", "wood"}
+            )
+            and summary.estimated_hard_floor_scope_area_m2
+        ):
             quantity = float(summary.estimated_hard_floor_scope_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -339,7 +469,10 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"carpet", "underlay"}) and summary.estimated_carpet_scope_area_m2:
+        if (
+            any(token in tokens for token in {"carpet", "underlay"})
+            and summary.estimated_carpet_scope_area_m2
+        ):
             quantity = float(summary.estimated_carpet_scope_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -352,7 +485,10 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"slab", "screed", "concrete"}) and summary.estimated_extension_slab_area_m2:
+        if (
+            any(token in tokens for token in {"slab", "screed", "concrete"})
+            and summary.estimated_extension_slab_area_m2
+        ):
             quantity = float(summary.estimated_extension_slab_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -365,7 +501,10 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"flat", "roof", "warm", "grp"}) and summary.estimated_extension_flat_roof_area_m2:
+        if (
+            any(token in tokens for token in {"flat", "roof", "warm", "grp"})
+            and summary.estimated_extension_flat_roof_area_m2
+        ):
             quantity = float(summary.estimated_extension_flat_roof_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -378,9 +517,14 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"brick", "block", "cavity", "external", "wall"}) and any(
-            token in tokens for token in {"extension", "rear"}
-        ) and summary.estimated_extension_external_wall_area_m2:
+        if (
+            any(
+                token in tokens
+                for token in {"brick", "block", "cavity", "external", "wall"}
+            )
+            and any(token in tokens for token in {"extension", "rear"})
+            and summary.estimated_extension_external_wall_area_m2
+        ):
             quantity = float(summary.estimated_extension_external_wall_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -393,9 +537,13 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"roof", "dormer", "loft", "rafter"}) and any(
-            token in tokens for token in {"remove", "strip", "demo", "demolition"}
-        ) and summary.estimated_roof_removal_area_m2:
+        if (
+            any(token in tokens for token in {"roof", "dormer", "loft", "rafter"})
+            and any(
+                token in tokens for token in {"remove", "strip", "demo", "demolition"}
+            )
+            and summary.estimated_roof_removal_area_m2
+        ):
             quantity = float(summary.estimated_roof_removal_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -421,9 +569,14 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"roof", "dormer", "loft", "rafter"}) and any(
-            token in tokens for token in {"plasterboard", "board", "insulation", "pir"}
-        ) and summary.estimated_loft_roof_finish_area_m2:
+        if (
+            any(token in tokens for token in {"roof", "dormer", "loft", "rafter"})
+            and any(
+                token in tokens
+                for token in {"plasterboard", "board", "insulation", "pir"}
+            )
+            and summary.estimated_loft_roof_finish_area_m2
+        ):
             quantity = float(summary.estimated_loft_roof_finish_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -439,7 +592,9 @@ def suggest_quantity_from_takeoff(
 
     if matched_rooms and unit == "m2":
         if "tile" in tokens and "wall" in tokens and matched_wet_rooms:
-            quantity = float(sum(room.estimated_wall_tiling_area_m2 for room in matched_wet_rooms))
+            quantity = float(
+                sum(room.estimated_wall_tiling_area_m2 for room in matched_wet_rooms)
+            )
             return TakeoffSuggestion(
                 quantity=quantity,
                 needs_review=True,
@@ -452,7 +607,9 @@ def suggest_quantity_from_takeoff(
                 ),
             )
         if "tile" in tokens and "floor" in tokens and matched_wet_rooms:
-            quantity = float(sum(room.estimated_floor_finish_area_m2 for room in matched_wet_rooms))
+            quantity = float(
+                sum(room.estimated_floor_finish_area_m2 for room in matched_wet_rooms)
+            )
             return TakeoffSuggestion(
                 quantity=quantity,
                 needs_review=True,
@@ -465,7 +622,9 @@ def suggest_quantity_from_takeoff(
                 ),
             )
         if ("paint" in tokens or "decorate" in tokens) and "ceiling" in tokens:
-            quantity = float(sum(room.estimated_ceiling_finish_area_m2 for room in matched_rooms))
+            quantity = float(
+                sum(room.estimated_ceiling_finish_area_m2 for room in matched_rooms)
+            )
             return TakeoffSuggestion(
                 quantity=quantity,
                 needs_review=True,
@@ -477,8 +636,16 @@ def suggest_quantity_from_takeoff(
                     "Used room-specific ceiling takeoff from the structured prompt.",
                 ),
             )
-        if any(token in tokens for token in {"paint", "decorate", "skim", "plaster", "render"}) and "wall" in tokens:
-            quantity = float(sum(room.estimated_wall_finish_area_m2 for room in matched_rooms))
+        if (
+            any(
+                token in tokens
+                for token in {"paint", "decorate", "skim", "plaster", "render"}
+            )
+            and "wall" in tokens
+        ):
+            quantity = float(
+                sum(room.estimated_wall_finish_area_m2 for room in matched_rooms)
+            )
             return TakeoffSuggestion(
                 quantity=quantity,
                 needs_review=True,
@@ -490,8 +657,13 @@ def suggest_quantity_from_takeoff(
                     "Used room-specific wall finish takeoff from the structured prompt.",
                 ),
             )
-        if any(token in tokens for token in {"plasterboard", "board"}) and "ceiling" in tokens:
-            quantity = float(sum(room.estimated_ceiling_finish_area_m2 for room in matched_rooms))
+        if (
+            any(token in tokens for token in {"plasterboard", "board"})
+            and "ceiling" in tokens
+        ):
+            quantity = float(
+                sum(room.estimated_ceiling_finish_area_m2 for room in matched_rooms)
+            )
             return TakeoffSuggestion(
                 quantity=quantity,
                 needs_review=True,
@@ -503,7 +675,17 @@ def suggest_quantity_from_takeoff(
                     "Used room-specific ceiling boarding takeoff from the structured prompt.",
                 ),
             )
-        if any(token in tokens for token in {"floor", "laminate", "vinyl", "timber", "engineered", "carpet"}):
+        if any(
+            token in tokens
+            for token in {
+                "floor",
+                "laminate",
+                "vinyl",
+                "timber",
+                "engineered",
+                "carpet",
+            }
+        ):
             quantity = float(sum(room.area_m2 for room in matched_rooms))
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -518,7 +700,11 @@ def suggest_quantity_from_takeoff(
             )
 
     if unit == "pcs" and not matched_rooms:
-        if "electric" in tokens and any(token in tokens for token in {"second", "fix"}) and summary.estimated_electrical_second_fix_points:
+        if (
+            "electric" in tokens
+            and any(token in tokens for token in {"second", "fix"})
+            and summary.estimated_electrical_second_fix_points
+        ):
             quantity = float(summary.estimated_electrical_second_fix_points)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -531,7 +717,11 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if "plumb" in tokens and any(token in tokens for token in {"second", "fix"}) and summary.estimated_plumbing_second_fix_points:
+        if (
+            "plumb" in tokens
+            and any(token in tokens for token in {"second", "fix"})
+            and summary.estimated_plumbing_second_fix_points
+        ):
             quantity = float(summary.estimated_plumbing_second_fix_points)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -549,7 +739,9 @@ def suggest_quantity_from_takeoff(
         if any(token in tokens for token in {"downlight", "spotlight"}):
             quantity = _sum_room_metric(matched_rooms, "estimated_downlight_count")
             if quantity <= 0:
-                quantity = _sum_room_metric(matched_rooms, "estimated_lighting_point_count")
+                quantity = _sum_room_metric(
+                    matched_rooms, "estimated_lighting_point_count"
+                )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -590,7 +782,10 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific switch allowances from the structured prompt.",
                     ),
                 )
-        if any(token in tokens for token in {"downlight", "spotlight", "light"}) and "wall" not in tokens:
+        if (
+            any(token in tokens for token in {"downlight", "spotlight", "light"})
+            and "wall" not in tokens
+        ):
             quantity = _sum_room_metric(matched_rooms, "estimated_lighting_point_count")
             if quantity > 0:
                 return TakeoffSuggestion(
@@ -605,9 +800,13 @@ def suggest_quantity_from_takeoff(
                     ),
                 )
         if ("extractor" in tokens or "fan" in tokens) and "duct" in tokens:
-            quantity = _sum_room_metric(matched_rooms, "estimated_ducted_extractor_count")
+            quantity = _sum_room_metric(
+                matched_rooms, "estimated_ducted_extractor_count"
+            )
             if quantity <= 0:
-                quantity = _sum_room_metric(matched_rooms, "estimated_extractor_fan_count")
+                quantity = _sum_room_metric(
+                    matched_rooms, "estimated_extractor_fan_count"
+                )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -620,7 +819,10 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific ducted extractor counts from the structured prompt.",
                     ),
                 )
-        if "extractor" in tokens or ("fan" in tokens and not any(token in tokens for token in {"ceiling", "wall"})):
+        if "extractor" in tokens or (
+            "fan" in tokens
+            and not any(token in tokens for token in {"ceiling", "wall"})
+        ):
             quantity = _sum_room_metric(matched_rooms, "estimated_extractor_fan_count")
             if quantity > 0:
                 return TakeoffSuggestion(
@@ -634,10 +836,16 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific extractor fan allowances from the structured prompt.",
                     ),
                 )
-        if "appliance" in tokens and any(token in tokens for token in {"hardwire", "wire"}):
-            quantity = _sum_room_metric(matched_rooms, "estimated_hardwired_appliance_count")
+        if "appliance" in tokens and any(
+            token in tokens for token in {"hardwire", "wire"}
+        ):
+            quantity = _sum_room_metric(
+                matched_rooms, "estimated_hardwired_appliance_count"
+            )
             if quantity <= 0:
-                quantity = _sum_room_metric(matched_rooms, "estimated_appliance_connection_count")
+                quantity = _sum_room_metric(
+                    matched_rooms, "estimated_appliance_connection_count"
+                )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -650,10 +858,28 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific hardwired appliance counts from the structured prompt.",
                     ),
                 )
-        if "electric" in tokens and any(token in tokens for token in {"second", "fix", "fit", "off"}) and not any(
-            token in tokens for token in {"socket", "switch", "downlight", "spotlight", "light", "extractor", "fan", "consumer", "board", "rewire"}
+        if (
+            "electric" in tokens
+            and any(token in tokens for token in {"second", "fix", "fit", "off"})
+            and not any(
+                token in tokens
+                for token in {
+                    "socket",
+                    "switch",
+                    "downlight",
+                    "spotlight",
+                    "light",
+                    "extractor",
+                    "fan",
+                    "consumer",
+                    "board",
+                    "rewire",
+                }
+            )
         ):
-            quantity = _sum_room_metric(matched_rooms, "estimated_electrical_second_fix_points")
+            quantity = _sum_room_metric(
+                matched_rooms, "estimated_electrical_second_fix_points"
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -666,10 +892,14 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific electrical second-fix allowances from the structured prompt.",
                     ),
                 )
-        if any(token in tokens for token in {"cistern", "concealed"}) or (
-            "wc" in tokens and "wall" in tokens and "hung" in tokens
-        ) or ("toilet" in tokens and "wall" in tokens and "hung" in tokens):
-            quantity = _sum_room_metric(matched_rooms, "estimated_concealed_cistern_count")
+        if (
+            any(token in tokens for token in {"cistern", "concealed"})
+            or ("wc" in tokens and "wall" in tokens and "hung" in tokens)
+            or ("toilet" in tokens and "wall" in tokens and "hung" in tokens)
+        ):
+            quantity = _sum_room_metric(
+                matched_rooms, "estimated_concealed_cistern_count"
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -682,7 +912,9 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific concealed cistern counts from the structured prompt.",
                     ),
                 )
-        if any(token in tokens for token in {"toilet", "wc"}) and not any(token in tokens for token in {"frame", "door"}):
+        if any(token in tokens for token in {"toilet", "wc"}) and not any(
+            token in tokens for token in {"frame", "door"}
+        ):
             quantity = _sum_room_metric(matched_rooms, "estimated_wc_count")
             if quantity > 0:
                 return TakeoffSuggestion(
@@ -738,8 +970,13 @@ def suggest_quantity_from_takeoff(
                         "Used room-specific sink fixture counts from the structured prompt.",
                     ),
                 )
-        if "appliance" in tokens and any(token in tokens for token in {"connect", "connection", "connections", "reconnect"}):
-            quantity = _sum_room_metric(matched_rooms, "estimated_appliance_connection_count")
+        if "appliance" in tokens and any(
+            token in tokens
+            for token in {"connect", "connection", "connections", "reconnect"}
+        ):
+            quantity = _sum_room_metric(
+                matched_rooms, "estimated_appliance_connection_count"
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -781,9 +1018,23 @@ def suggest_quantity_from_takeoff(
                     ),
                 )
         if any(token in tokens for token in {"sanitary", "suite"}) and not any(
-            token in tokens for token in {"wc", "toilet", "basin", "sink", "shower", "bath", "radiator", "first", "second", "fix"}
+            token in tokens
+            for token in {
+                "wc",
+                "toilet",
+                "basin",
+                "sink",
+                "shower",
+                "bath",
+                "radiator",
+                "first",
+                "second",
+                "fix",
+            }
         ):
-            quantity = _sum_room_metric(matched_wet_rooms, "estimated_sanitary_set_count")
+            quantity = _sum_room_metric(
+                matched_wet_rooms, "estimated_sanitary_set_count"
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -797,9 +1048,27 @@ def suggest_quantity_from_takeoff(
                     ),
                 )
         if any(token in tokens for token in {"plumb", "first", "second"}) and not any(
-            token in tokens for token in {"wc", "toilet", "basin", "sink", "shower", "bath", "radiator", "boiler", "cylinder", "sanitary", "suite"}
+            token in tokens
+            for token in {
+                "wc",
+                "toilet",
+                "basin",
+                "sink",
+                "shower",
+                "bath",
+                "radiator",
+                "boiler",
+                "cylinder",
+                "sanitary",
+                "suite",
+            }
         ):
-            quantity = float(sum(room.estimated_plumbing_second_fix_points for room in matched_plumbing_rooms))
+            quantity = float(
+                sum(
+                    room.estimated_plumbing_second_fix_points
+                    for room in matched_plumbing_rooms
+                )
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -813,7 +1082,10 @@ def suggest_quantity_from_takeoff(
                     ),
                 )
     if unit == "pcs":
-        if any(token in tokens for token in {"stair", "staircase"}) and summary.staircase_count > 0:
+        if (
+            any(token in tokens for token in {"stair", "staircase"})
+            and summary.staircase_count > 0
+        ):
             quantity = _sum_summary_fixture_metric(summary, "staircase_count")
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -839,10 +1111,14 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if "architrave" in tokens and summary.architrave_set_count > 0 and _has_extracted_scope_line(
-            extracted_scope,
-            section_keys=("woodwork_painting", "joinery"),
-            keywords=("architrave",),
+        if (
+            "architrave" in tokens
+            and summary.architrave_set_count > 0
+            and _has_extracted_scope_line(
+                extracted_scope,
+                section_keys=("woodwork_painting", "joinery"),
+                keywords=("architrave",),
+            )
         ):
             quantity = _sum_summary_fixture_metric(summary, "architrave_set_count")
             return TakeoffSuggestion(
@@ -861,11 +1137,15 @@ def suggest_quantity_from_takeoff(
             reason = "Used extracted pocket door set counts from the structured prompt."
             review_reason = "Pocket door quantity was derived from explicit doors scope. Confirm whether this row is per set, per leaf, or should split ironmongery, cassette, and fire-rating extras."
             if "fire" in tokens and summary.fire_rated_pocket_door_set_count > 0:
-                quantity = _sum_summary_fixture_metric(summary, "fire_rated_pocket_door_set_count")
+                quantity = _sum_summary_fixture_metric(
+                    summary, "fire_rated_pocket_door_set_count"
+                )
                 reason = "Used extracted fire-rated pocket door set counts from the structured prompt."
                 review_reason = "Fire-rated pocket door quantity was derived from explicit doors scope. Confirm per-set versus per-leaf pricing and whether ironmongery or fire upgrades sit in separate rows."
             elif "double" in tokens and summary.double_pocket_door_set_count > 0:
-                quantity = _sum_summary_fixture_metric(summary, "double_pocket_door_set_count")
+                quantity = _sum_summary_fixture_metric(
+                    summary, "double_pocket_door_set_count"
+                )
                 reason = "Used extracted double pocket door set counts from the structured prompt."
                 review_reason = "Double pocket door quantity was derived from explicit doors scope. Confirm per-set versus per-leaf pricing and whether both leaves or ironmongery are priced separately."
             elif summary.pocket_door_set_count > 0:
@@ -882,7 +1162,11 @@ def suggest_quantity_from_takeoff(
                         severity="warning",
                     ),
                 )
-        if "door" in tokens and "fire" in tokens and summary.fire_rated_door_set_count > 0:
+        if (
+            "door" in tokens
+            and "fire" in tokens
+            and summary.fire_rated_door_set_count > 0
+        ):
             quantity = _sum_summary_fixture_metric(summary, "fire_rated_door_set_count")
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -895,9 +1179,11 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"storage", "cupboard", "wardrobe"}) and any(
-            token in tokens for token in {"door", "set"}
-        ) and summary.storage_door_set_count > 0:
+        if (
+            any(token in tokens for token in {"storage", "cupboard", "wardrobe"})
+            and any(token in tokens for token in {"door", "set"})
+            and summary.storage_door_set_count > 0
+        ):
             quantity = _sum_summary_fixture_metric(summary, "storage_door_set_count")
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -910,7 +1196,9 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if ("consumer" in tokens and "unit" in tokens) or ("distribution" in tokens and "board" in tokens):
+        if ("consumer" in tokens and "unit" in tokens) or (
+            "distribution" in tokens and "board" in tokens
+        ):
             quantity = _sum_summary_fixture_metric(summary, "consumer_unit_count")
             if quantity > 0:
                 return TakeoffSuggestion(
@@ -954,10 +1242,14 @@ def suggest_quantity_from_takeoff(
                         severity="warning",
                     ),
                 )
-        if "appliance" in tokens and any(token in tokens for token in {"hardwire", "wire"}):
+        if "appliance" in tokens and any(
+            token in tokens for token in {"hardwire", "wire"}
+        ):
             quantity = _sum_summary_fixture_metric(summary, "hardwired_appliance_count")
             if quantity <= 0:
-                quantity = _sum_summary_fixture_metric(summary, "total_appliance_connection_count")
+                quantity = _sum_summary_fixture_metric(
+                    summary, "total_appliance_connection_count"
+                )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -970,10 +1262,14 @@ def suggest_quantity_from_takeoff(
                         severity="warning",
                     ),
                 )
-        if any(token in tokens for token in {"cistern", "concealed"}) or (
-            "wc" in tokens and "wall" in tokens and "hung" in tokens
-        ) or ("toilet" in tokens and "wall" in tokens and "hung" in tokens):
-            quantity = _sum_summary_fixture_metric(summary, "total_concealed_cistern_count")
+        if (
+            any(token in tokens for token in {"cistern", "concealed"})
+            or ("wc" in tokens and "wall" in tokens and "hung" in tokens)
+            or ("toilet" in tokens and "wall" in tokens and "hung" in tokens)
+        ):
+            quantity = _sum_summary_fixture_metric(
+                summary, "total_concealed_cistern_count"
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -986,7 +1282,9 @@ def suggest_quantity_from_takeoff(
                         severity="warning",
                     ),
                 )
-        if any(token in tokens for token in {"toilet", "wc"}) and not any(token in tokens for token in {"frame", "door"}):
+        if any(token in tokens for token in {"toilet", "wc"}) and not any(
+            token in tokens for token in {"frame", "door"}
+        ):
             quantity = _sum_summary_fixture_metric(summary, "total_wc_count")
             if quantity > 0:
                 return TakeoffSuggestion(
@@ -1042,8 +1340,13 @@ def suggest_quantity_from_takeoff(
                         severity="warning",
                     ),
                 )
-        if "appliance" in tokens and any(token in tokens for token in {"connect", "connection", "connections", "reconnect"}):
-            quantity = _sum_summary_fixture_metric(summary, "total_appliance_connection_count")
+        if "appliance" in tokens and any(
+            token in tokens
+            for token in {"connect", "connection", "connections", "reconnect"}
+        ):
+            quantity = _sum_summary_fixture_metric(
+                summary, "total_appliance_connection_count"
+            )
             if quantity > 0:
                 return TakeoffSuggestion(
                     quantity=quantity,
@@ -1084,8 +1387,23 @@ def suggest_quantity_from_takeoff(
                         severity="warning",
                     ),
                 )
-        if any(token in tokens for token in {"sanitary", "suite", "bathroom"}) and not any(
-            token in tokens for token in {"wc", "toilet", "basin", "sink", "shower", "bath", "radiator", "plumb", "first", "second", "fix"}
+        if any(
+            token in tokens for token in {"sanitary", "suite", "bathroom"}
+        ) and not any(
+            token in tokens
+            for token in {
+                "wc",
+                "toilet",
+                "basin",
+                "sink",
+                "shower",
+                "bath",
+                "radiator",
+                "plumb",
+                "first",
+                "second",
+                "fix",
+            }
         ):
             quantity = _sum_summary_fixture_metric(summary, "total_sanitary_set_count")
             if quantity > 0:
@@ -1102,18 +1420,69 @@ def suggest_quantity_from_takeoff(
                 )
 
     exact_count_cases: list[tuple[bool, float, str]] = [
-        ("socket" in tokens, summary.socket_count, "Used the extracted electrical count from the structured prompt."),
-        ("switch" in tokens, summary.switch_count, "Used the extracted electrical count from the structured prompt."),
-        (("extractor" in tokens or "fan" in tokens), summary.extractor_fan_count, "Used the extracted extractor fan count from the structured prompt."),
-        (("velux" in tokens), summary.velux_count, "Used the extracted roof window count from the structured prompt."),
-        (("window" in tokens and "velux" not in tokens), summary.upvc_window_count, "Used the extracted uPVC window count from the structured prompt."),
-        (("radiator" in tokens and ("remove" in tokens or "strip" in tokens or "demolition" in tokens)), summary.radiator_removal_count, "Used the extracted radiator removal count from the structured prompt."),
-        (("radiator" in tokens), summary.radiator_install_count, "Used the extracted radiator install count from the structured prompt."),
-        (("door" in tokens), summary.door_set_count, "Used the counted door sets from the structured prompt."),
-        (("junction" in tokens or "connection" in tokens), summary.steel_junction_count, "Used the extracted steel junction count from the structured prompt."),
-        (("post" in tokens or "column" in tokens), summary.steel_post_count, "Used the extracted steel post count from the structured prompt."),
-        (("tree" in tokens), summary.tree_count, "Used the extracted tree count from the structured prompt."),
-        (("fence" in tokens), summary.fence_count, "Used the extracted fence count from the structured prompt."),
+        (
+            "socket" in tokens,
+            summary.socket_count,
+            "Used the extracted electrical count from the structured prompt.",
+        ),
+        (
+            "switch" in tokens,
+            summary.switch_count,
+            "Used the extracted electrical count from the structured prompt.",
+        ),
+        (
+            ("extractor" in tokens or "fan" in tokens),
+            summary.extractor_fan_count,
+            "Used the extracted extractor fan count from the structured prompt.",
+        ),
+        (
+            ("velux" in tokens),
+            summary.velux_count,
+            "Used the extracted roof window count from the structured prompt.",
+        ),
+        (
+            ("window" in tokens and "velux" not in tokens),
+            summary.upvc_window_count,
+            "Used the extracted uPVC window count from the structured prompt.",
+        ),
+        (
+            (
+                "radiator" in tokens
+                and ("remove" in tokens or "strip" in tokens or "demolition" in tokens)
+            ),
+            summary.radiator_removal_count,
+            "Used the extracted radiator removal count from the structured prompt.",
+        ),
+        (
+            ("radiator" in tokens),
+            summary.radiator_install_count,
+            "Used the extracted radiator install count from the structured prompt.",
+        ),
+        (
+            ("door" in tokens),
+            summary.door_set_count,
+            "Used the counted door sets from the structured prompt.",
+        ),
+        (
+            ("junction" in tokens or "connection" in tokens),
+            summary.steel_junction_count,
+            "Used the extracted steel junction count from the structured prompt.",
+        ),
+        (
+            ("post" in tokens or "column" in tokens),
+            summary.steel_post_count,
+            "Used the extracted steel post count from the structured prompt.",
+        ),
+        (
+            ("tree" in tokens),
+            summary.tree_count,
+            "Used the extracted tree count from the structured prompt.",
+        ),
+        (
+            ("fence" in tokens),
+            summary.fence_count,
+            "Used the extracted fence count from the structured prompt.",
+        ),
     ]
     for condition, quantity, reason in exact_count_cases:
         if condition and quantity and unit == "pcs":
@@ -1122,8 +1491,15 @@ def suggest_quantity_from_takeoff(
                 quantity=float(quantity),
                 area=detect_area(segment),
                 needs_review=needs_review,
-                review_reason="Structured takeoff count was used. Review if this should be per leaf or per set." if needs_review else None,
-                assumption=_build_assumption(row.WorkName, float(quantity), reason, severity="warning" if needs_review else "info"),
+                review_reason="Structured takeoff count was used. Review if this should be per leaf or per set."
+                if needs_review
+                else None,
+                assumption=_build_assumption(
+                    row.WorkName,
+                    float(quantity),
+                    reason,
+                    severity="warning" if needs_review else "info",
+                ),
             )
 
     if unit == "m3":
@@ -1131,15 +1507,35 @@ def suggest_quantity_from_takeoff(
             quantity = float(summary.soil_volume_m3)
             return TakeoffSuggestion(
                 quantity=quantity,
-                assumption=_build_assumption(row.WorkName, quantity, "Used the extracted soil volume from the structured prompt."),
+                assumption=_build_assumption(
+                    row.WorkName,
+                    quantity,
+                    "Used the extracted soil volume from the structured prompt.",
+                ),
             )
         if "trench" in tokens and summary.trench_foundation_volume_m3:
             quantity = float(summary.trench_foundation_volume_m3)
             return TakeoffSuggestion(
                 quantity=quantity,
-                assumption=_build_assumption(row.WorkName, quantity, "Used the extracted trench foundation concrete volume."),
+                assumption=_build_assumption(
+                    row.WorkName,
+                    quantity,
+                    "Used the extracted trench foundation concrete volume.",
+                ),
             )
-        if any(token in tokens for token in {"foundation", "concrete", "excavate", "excavation", "slab"}) and summary.total_foundation_concrete_m3:
+        if (
+            any(
+                token in tokens
+                for token in {
+                    "foundation",
+                    "concrete",
+                    "excavate",
+                    "excavation",
+                    "slab",
+                }
+            )
+            and summary.total_foundation_concrete_m3
+        ):
             quantity = float(summary.total_foundation_concrete_m3)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1154,7 +1550,11 @@ def suggest_quantity_from_takeoff(
             )
 
     if unit == "m2":
-        if ("paint" in tokens or "decorate" in tokens) and "ceiling" in tokens and summary.estimated_ceiling_finish_area_m2:
+        if (
+            ("paint" in tokens or "decorate" in tokens)
+            and "ceiling" in tokens
+            and summary.estimated_ceiling_finish_area_m2
+        ):
             quantity = float(summary.estimated_ceiling_finish_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1167,7 +1567,14 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"paint", "decorate", "skim", "plaster", "render"}) and "wall" in tokens and summary.estimated_wall_finish_area_m2:
+        if (
+            any(
+                token in tokens
+                for token in {"paint", "decorate", "skim", "plaster", "render"}
+            )
+            and "wall" in tokens
+            and summary.estimated_wall_finish_area_m2
+        ):
             quantity = float(summary.estimated_wall_finish_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1180,7 +1587,11 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"plasterboard", "board"}) and "ceiling" in tokens and summary.estimated_ceiling_finish_area_m2:
+        if (
+            any(token in tokens for token in {"plasterboard", "board"})
+            and "ceiling" in tokens
+            and summary.estimated_ceiling_finish_area_m2
+        ):
             quantity = float(summary.estimated_ceiling_finish_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1193,9 +1604,11 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"plasterboard", "board"}) and not any(
-            token in tokens for token in {"partition", "stud", "wall"}
-        ) and summary.estimated_boarding_coverage_m2:
+        if (
+            any(token in tokens for token in {"plasterboard", "board"})
+            and not any(token in tokens for token in {"partition", "stud", "wall"})
+            and summary.estimated_boarding_coverage_m2
+        ):
             quantity = float(summary.estimated_boarding_coverage_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1208,9 +1621,11 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"insulation", "pir"}) and any(
-            token in tokens for token in {"roof", "rafter", "loft", "dormer"}
-        ) and summary.roof_area_m2:
+        if (
+            any(token in tokens for token in {"insulation", "pir"})
+            and any(token in tokens for token in {"roof", "rafter", "loft", "dormer"})
+            and summary.roof_area_m2
+        ):
             quantity = float(summary.roof_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1223,7 +1638,10 @@ def suggest_quantity_from_takeoff(
                     severity="warning",
                 ),
             )
-        if any(token in tokens for token in {"insulation", "pir", "acoustic"}) and summary.estimated_insulation_coverage_m2:
+        if (
+            any(token in tokens for token in {"insulation", "pir", "acoustic"})
+            and summary.estimated_insulation_coverage_m2
+        ):
             quantity = float(summary.estimated_insulation_coverage_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1240,15 +1658,29 @@ def suggest_quantity_from_takeoff(
             quantity = float(summary.roof_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
-                assumption=_build_assumption(row.WorkName, quantity, "Used the extracted roof area from the structured prompt."),
+                assumption=_build_assumption(
+                    row.WorkName,
+                    quantity,
+                    "Used the extracted roof area from the structured prompt.",
+                ),
             )
         if "patio" in tokens and summary.patio_area_m2:
             quantity = float(summary.patio_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
-                assumption=_build_assumption(row.WorkName, quantity, "Used the extracted patio area from the structured prompt."),
+                assumption=_build_assumption(
+                    row.WorkName,
+                    quantity,
+                    "Used the extracted patio area from the structured prompt.",
+                ),
             )
-        if any(token in tokens for token in {"floor", "laminate", "vinyl", "timber", "engineered"}) and summary.total_internal_floor_area_m2:
+        if (
+            any(
+                token in tokens
+                for token in {"floor", "laminate", "vinyl", "timber", "engineered"}
+            )
+            and summary.total_internal_floor_area_m2
+        ):
             quantity = float(summary.total_internal_floor_area_m2)
             return TakeoffSuggestion(
                 quantity=quantity,
@@ -1290,10 +1722,15 @@ def suggest_quantity_from_takeoff(
             ),
         )
 
-    if unit == "m" and "architrave" in tokens and summary.estimated_architrave_lm and _has_extracted_scope_line(
-        extracted_scope,
-        section_keys=("woodwork_painting", "joinery"),
-        keywords=("architrave",),
+    if (
+        unit == "m"
+        and "architrave" in tokens
+        and summary.estimated_architrave_lm
+        and _has_extracted_scope_line(
+            extracted_scope,
+            section_keys=("woodwork_painting", "joinery"),
+            keywords=("architrave",),
+        )
     ):
         quantity = float(summary.estimated_architrave_lm)
         return TakeoffSuggestion(
@@ -1308,7 +1745,12 @@ def suggest_quantity_from_takeoff(
             ),
         )
 
-    if unit == "m" and "window" in tokens and "board" in tokens and summary.estimated_window_board_lm:
+    if (
+        unit == "m"
+        and "window" in tokens
+        and "board" in tokens
+        and summary.estimated_window_board_lm
+    ):
         quantity = float(summary.estimated_window_board_lm)
         return TakeoffSuggestion(
             quantity=quantity,

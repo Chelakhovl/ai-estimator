@@ -42,7 +42,9 @@ class IntakeLLMClient:
         responses_api = getattr(self.client, "responses", None)
         return callable(getattr(responses_api, "parse", None))
 
-    def _build_asset_content(self, assets: list[IntakeAssetExcerpt]) -> list[dict[str, str]]:
+    def _build_asset_content(
+        self, assets: list[IntakeAssetExcerpt]
+    ) -> list[dict[str, str]]:
         content: list[dict[str, str]] = []
         for asset in assets:
             if asset.asset_type == "pdf" and asset.pdf_base64:
@@ -72,7 +74,11 @@ class IntakeLLMClient:
         return content
 
     def _build_chat_input(self, payload: IntakeChatRequest) -> list[dict[str, object]]:
-        transcript = "\n".join(f"{turn.role.upper()}: {turn.message}" for turn in payload.turns if turn.message.strip())
+        transcript = "\n".join(
+            f"{turn.role.upper()}: {turn.message}"
+            for turn in payload.turns
+            if turn.message.strip()
+        )
         current_brief = payload.current_project_brief_json
         content: list[dict[str, object]] = [
             {
@@ -102,8 +108,14 @@ class IntakeLLMClient:
         content.extend(self._build_asset_content(payload.assets))
         return [{"role": "user", "content": content}]
 
-    def _build_finalize_input(self, payload: IntakeFinalizeRequest) -> list[dict[str, object]]:
-        transcript = "\n".join(f"{turn.role.upper()}: {turn.message}" for turn in payload.turns if turn.message.strip())
+    def _build_finalize_input(
+        self, payload: IntakeFinalizeRequest
+    ) -> list[dict[str, object]]:
+        transcript = "\n".join(
+            f"{turn.role.upper()}: {turn.message}"
+            for turn in payload.turns
+            if turn.message.strip()
+        )
         content: list[dict[str, object]] = [
             {
                 "type": "input_text",
@@ -163,4 +175,3 @@ class IntakeLLMClient:
             "latency_ms": int((perf_counter() - started_at) * 1000),
         }
         return parsed
-

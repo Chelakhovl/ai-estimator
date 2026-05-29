@@ -97,7 +97,9 @@ def test_prompt_templates_requires_valid_api_key(monkeypatch) -> None:
     reload(app_matcher)
 
     client = TestClient(app)
-    response = client.get("/v1/estimate/prompt-templates", headers={"x-api-key": "test-secret"})
+    response = client.get(
+        "/v1/estimate/prompt-templates", headers={"x-api-key": "test-secret"}
+    )
 
     assert response.status_code == 200
     body = response.json()

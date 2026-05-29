@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from app.schemas import CandidateRow, LLMPreviewMatchedRow, PreviewAssumption, PreviewMatchedRow
-from app.services.calculator import calculate_client_cost_per_unit, calculate_client_total_cost
+from app.schemas import (
+    CandidateRow,
+    LLMPreviewMatchedRow,
+    PreviewAssumption,
+    PreviewMatchedRow,
+)
+from app.services.calculator import (
+    calculate_client_cost_per_unit,
+    calculate_client_total_cost,
+)
 
 
 def _resolve_optional_numeric_override(
@@ -25,7 +33,9 @@ def validate_and_materialize_match(
 ) -> tuple[PreviewMatchedRow, list[PreviewAssumption]]:
     candidate = candidate_lookup.get(llm_row.INSIDEQUOTESGUID)
     if candidate is None:
-        raise ValueError(f"Unknown INSIDEQUOTESGUID returned by model: {llm_row.INSIDEQUOTESGUID}")
+        raise ValueError(
+            f"Unknown INSIDEQUOTESGUID returned by model: {llm_row.INSIDEQUOTESGUID}"
+        )
 
     assumptions: list[PreviewAssumption] = []
 
@@ -69,7 +79,9 @@ def validate_and_materialize_match(
 
     confidence = llm_row.Confidence if llm_row.Confidence is not None else 0.7
     confidence = min(1, max(0, confidence))
-    needs_review = llm_row.NeedsReview if llm_row.NeedsReview is not None else confidence < 0.75
+    needs_review = (
+        llm_row.NeedsReview if llm_row.NeedsReview is not None else confidence < 0.75
+    )
     review_reason = llm_row.ReviewReason
     if needs_review and not review_reason:
         review_reason = "Model flagged this row for manual review."

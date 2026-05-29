@@ -70,7 +70,14 @@ SECTION_HEADING_ALIASES = {
     "commercial": "commercial_settings",
 }
 
-ROOM_LEVEL_ORDER = ["Basement", "Lower Ground Floor", "Ground Floor", "First Floor", "Second Floor", "Loft"]
+ROOM_LEVEL_ORDER = [
+    "Basement",
+    "Lower Ground Floor",
+    "Ground Floor",
+    "First Floor",
+    "Second Floor",
+    "Loft",
+]
 ROOM_LEVELS = set(ROOM_LEVEL_ORDER)
 ROOM_LEVELS_LOWER = {level.lower() for level in ROOM_LEVELS}
 _INLINE_SECTION_TITLES = tuple(sorted(SECTION_TITLES.values(), key=len, reverse=True))
@@ -164,7 +171,12 @@ def prepare_prompt_lines(prompt: str) -> list[str]:
             flags=re.IGNORECASE,
         )
 
-    normalized = re.sub(r"\s+(Type|Location)\s*:\s*", lambda match: f"\n{match.group(1).title()}: ", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(
+        r"\s+(Type|Location)\s*:\s*",
+        lambda match: f"\n{match.group(1).title()}: ",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     normalized = _INLINE_ROOM_SEPARATOR_PATTERN.sub("\n", normalized)
 
     lines = [clean_line(line) for line in normalized.splitlines()]
@@ -200,7 +212,17 @@ def infer_default_room_level(prompt: str) -> str | None:
             return level
     if "flat" in normalized or "converted" in normalized:
         return "First Floor"
-    house_keywords = ("house", "terraced", "detached", "semi-detached", "semi detached", "bungalow", "cottage", "property", "maisonette")
+    house_keywords = (
+        "house",
+        "terraced",
+        "detached",
+        "semi-detached",
+        "semi detached",
+        "bungalow",
+        "cottage",
+        "property",
+        "maisonette",
+    )
     if any(keyword in normalized for keyword in house_keywords):
         return "Ground Floor"
     return None

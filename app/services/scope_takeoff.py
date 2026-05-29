@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import re
 
-from app.schemas import ExtractedRoom, ExtractedRoomTakeoff, ExtractedSection, StructuredTakeoffSummary
+from app.schemas import (
+    ExtractedRoom,
+    ExtractedRoomTakeoff,
+    ExtractedSection,
+    StructuredTakeoffSummary,
+)
 from app.services.generated_takeoff_defaults import (
     ARCHITRAVE_LM_PER_DOOR_SET as _ARCHITRAVE_LM_PER_DOOR_SET,
     LEVEL_WALL_HEIGHTS_M as _LEVEL_WALL_HEIGHTS_M,
     OPENING_DEDUCTION_FACTOR as _OPENING_DEDUCTION_FACTOR,
     SKIRTING_DEDUCTION_FACTOR as _SKIRTING_DEDUCTION_FACTOR,
-    TAKEOFF_HEURISTICS_SOURCE,
-    TAKEOFF_HEURISTICS_VERSION,
     WET_ROOM_TILING_FACTOR as _WET_ROOM_TILING_FACTOR,
 )
+
 _LEVEL_AREA_LOOKUP = {
     "basement": "basement_area_m2",
     "lower ground floor": "basement_area_m2",
@@ -45,7 +49,9 @@ def _round(value: float) -> float:
 
 
 def _sum_room_area(rooms: list[ExtractedRoom], level: str) -> float:
-    return _round(sum(room.area_m2 for room in rooms if room.level.lower() == level.lower()))
+    return _round(
+        sum(room.area_m2 for room in rooms if room.level.lower() == level.lower())
+    )
 
 
 def _sum_estimated_wall_finish_area(rooms: list[ExtractedRoom]) -> float:
@@ -80,7 +86,9 @@ def _estimate_room_skirting_lm(room: ExtractedRoom) -> float:
     return _round(perimeter * _SKIRTING_DEDUCTION_FACTOR)
 
 
-def _non_wet_rooms_for_level(room_takeoff: list[ExtractedRoomTakeoff], level: str | None = None) -> list[ExtractedRoomTakeoff]:
+def _non_wet_rooms_for_level(
+    room_takeoff: list[ExtractedRoomTakeoff], level: str | None = None
+) -> list[ExtractedRoomTakeoff]:
     rooms = [
         room
         for room in room_takeoff
@@ -176,7 +184,9 @@ def _estimate_room_fixture_counts(room_type: str) -> dict[str, float]:
             "estimated_sanitary_set_count": 0.0,
             "estimated_vanity_unit_count": 0.0,
             "estimated_concealed_cistern_count": 0.0,
-            "estimated_appliance_connection_count": 4.0 if room_type == "kitchen" else 2.0,
+            "estimated_appliance_connection_count": 4.0
+            if room_type == "kitchen"
+            else 2.0,
         }
     return {
         "estimated_wc_count": 0.0,
@@ -214,7 +224,16 @@ def _estimate_room_socket_count(room: ExtractedRoom, room_type: str) -> float:
 
 def _estimate_room_switch_count(room: ExtractedRoom, room_type: str) -> float:
     area = room.area_m2
-    if room_type in {"bathroom", "ensuite", "shower_room", "wc", "utility", "bedroom", "study", "store"}:
+    if room_type in {
+        "bathroom",
+        "ensuite",
+        "shower_room",
+        "wc",
+        "utility",
+        "bedroom",
+        "study",
+        "store",
+    }:
         return 1.0
     if room_type == "kitchen":
         return float(max(2, round(area / 12)))
@@ -291,22 +310,35 @@ def _estimate_flooring_scope_areas(
             continue
         if normalized.endswith(":"):
             continue
-        if any(keyword in normalized for keyword in ("by others", "excluded", "exclude", "by owner", "not in scope")):
+        if any(
+            keyword in normalized
+            for keyword in (
+                "by others",
+                "excluded",
+                "exclude",
+                "by owner",
+                "not in scope",
+            )
+        ):
             continue
 
         floor_scope: str | None = None
         if any(keyword in normalized for keyword in ("carpet", "underlay")):
             floor_scope = "carpet"
-        elif any(keyword in normalized for keyword in ("engineered", "laminate", "vinyl", "lvt", "timber", "wood")) or (
-            "floor" in normalized and "carpet" not in normalized
-        ):
+        elif any(
+            keyword in normalized
+            for keyword in ("engineered", "laminate", "vinyl", "lvt", "timber", "wood")
+        ) or ("floor" in normalized and "carpet" not in normalized):
             floor_scope = "hard"
         if not floor_scope:
             continue
 
         matched_rooms = _match_room_takeoff_for_line(room_takeoff, normalized)
         if not matched_rooms:
-            if any(keyword in normalized for keyword in ("throughout", "all", "full house", "full property")):
+            if any(
+                keyword in normalized
+                for keyword in ("throughout", "all", "full house", "full property")
+            ):
                 matched_rooms = _non_wet_rooms_for_level(room_takeoff)
             elif active_level:
                 matched_rooms = _non_wet_rooms_for_level(room_takeoff, active_level)
@@ -315,7 +347,9 @@ def _estimate_flooring_scope_areas(
         for room in matched_rooms:
             target[(room.level, room.name)] = room
 
-    return _round(sum(room.area_m2 for room in hard_floor_rooms.values())), _round(sum(room.area_m2 for room in carpet_rooms.values()))
+    return _round(sum(room.area_m2 for room in hard_floor_rooms.values())), _round(
+        sum(room.area_m2 for room in carpet_rooms.values())
+    )
 
 
 def _has_client_supply_sanitaryware(sections: list[ExtractedSection]) -> bool:
@@ -325,20 +359,44 @@ def _has_client_supply_sanitaryware(sections: list[ExtractedSection]) -> bool:
             continue
         if any(
             keyword in normalized
-            for keyword in ("sanitary", "sanitaryware", "wc", "toilet", "basin", "bath", "shower", "sink", "vanity")
+            for keyword in (
+                "sanitary",
+                "sanitaryware",
+                "wc",
+                "toilet",
+                "basin",
+                "bath",
+                "shower",
+                "sink",
+                "vanity",
+            )
         ):
             return True
     return False
 
 
 def _has_client_supply_appliances(sections: list[ExtractedSection]) -> bool:
-    for line in _iter_section_lines(sections, "electrical", "plumbing", "full_scope", "joinery"):
+    for line in _iter_section_lines(
+        sections, "electrical", "plumbing", "full_scope", "joinery"
+    ):
         normalized = line.lower()
         if "client supply" not in normalized:
             continue
         if any(
             keyword in normalized
-            for keyword in ("appliance", "appliances", "white goods", "oven", "hob", "extractor", "dishwasher", "fridge", "freezer", "washing machine", "dryer")
+            for keyword in (
+                "appliance",
+                "appliances",
+                "white goods",
+                "oven",
+                "hob",
+                "extractor",
+                "dishwasher",
+                "fridge",
+                "freezer",
+                "washing machine",
+                "dryer",
+            )
         ):
             return True
     return False
@@ -444,24 +502,40 @@ def _apply_explicit_sanitary_overrides(
         if "double basin" in normalized or "double vanity" in normalized:
             for room in matched_rooms:
                 room.estimated_basin_count = max(room.estimated_basin_count, 2.0)
-                room.estimated_vanity_unit_count = max(room.estimated_vanity_unit_count, 1.0)
+                room.estimated_vanity_unit_count = max(
+                    room.estimated_vanity_unit_count, 1.0
+                )
 
         if "vanity unit" in normalized or "vanity" in normalized:
             for room in matched_rooms:
-                room.estimated_vanity_unit_count = max(room.estimated_vanity_unit_count, 1.0)
-                room.estimated_basin_count = max(room.estimated_basin_count, 2.0 if "double" in normalized else 1.0)
+                room.estimated_vanity_unit_count = max(
+                    room.estimated_vanity_unit_count, 1.0
+                )
+                room.estimated_basin_count = max(
+                    room.estimated_basin_count, 2.0 if "double" in normalized else 1.0
+                )
 
         if "double sink" in normalized:
             for room in matched_rooms:
                 room.estimated_sink_count = max(room.estimated_sink_count, 2.0)
 
-        if "separate shower" in normalized or ("bath" in normalized and "shower" in normalized):
+        if "separate shower" in normalized or (
+            "bath" in normalized and "shower" in normalized
+        ):
             for room in matched_rooms:
                 if room.room_type in {"bathroom", "ensuite", "shower_room"}:
                     room.estimated_shower_count = max(room.estimated_shower_count, 1.0)
-                    room.estimated_bath_count = max(room.estimated_bath_count, 1.0) if "bath" in normalized else room.estimated_bath_count
+                    room.estimated_bath_count = (
+                        max(room.estimated_bath_count, 1.0)
+                        if "bath" in normalized
+                        else room.estimated_bath_count
+                    )
 
-        if "shower only" in normalized or "walk in shower" in normalized or "walk-in shower" in normalized:
+        if (
+            "shower only" in normalized
+            or "walk in shower" in normalized
+            or "walk-in shower" in normalized
+        ):
             for room in matched_rooms:
                 if room.room_type in {"bathroom", "ensuite", "shower_room"}:
                     room.estimated_bath_count = 0.0
@@ -479,16 +553,31 @@ def _apply_explicit_sanitary_overrides(
                     room.estimated_basin_count = 0.0
                     room.estimated_bath_count = 0.0
                     room.estimated_shower_count = 0.0
-                    room.estimated_plumbing_points = min(room.estimated_plumbing_points, 1.0)
-                    room.estimated_plumbing_second_fix_points = min(room.estimated_plumbing_second_fix_points, 1.0)
+                    room.estimated_plumbing_points = min(
+                        room.estimated_plumbing_points, 1.0
+                    )
+                    room.estimated_plumbing_second_fix_points = min(
+                        room.estimated_plumbing_second_fix_points, 1.0
+                    )
 
-        if "concealed cistern" in normalized or "wall hung wc" in normalized or "wall-hung wc" in normalized or "wall hung toilet" in normalized or "wall-hung toilet" in normalized:
+        if (
+            "concealed cistern" in normalized
+            or "wall hung wc" in normalized
+            or "wall-hung wc" in normalized
+            or "wall hung toilet" in normalized
+            or "wall-hung toilet" in normalized
+        ):
             for room in matched_rooms:
                 if room.room_type in {"bathroom", "ensuite", "shower_room", "wc"}:
                     room.estimated_wc_count = max(room.estimated_wc_count, 1.0)
-                    room.estimated_concealed_cistern_count = max(room.estimated_concealed_cistern_count, 1.0)
+                    room.estimated_concealed_cistern_count = max(
+                        room.estimated_concealed_cistern_count, 1.0
+                    )
 
-        if "appliance connection" in normalized or "appliance connections" in normalized:
+        if (
+            "appliance connection" in normalized
+            or "appliance connections" in normalized
+        ):
             explicit_count = _extract_explicit_count(normalized)
             if matched_rooms:
                 if explicit_count and len(matched_rooms) == 1:
@@ -498,32 +587,77 @@ def _apply_explicit_sanitary_overrides(
                     )
                 else:
                     for room in matched_rooms:
-                        baseline = explicit_count if explicit_count and len(matched_rooms) == 1 else room.estimated_appliance_connection_count
-                        room.estimated_appliance_connection_count = max(room.estimated_appliance_connection_count, baseline)
+                        baseline = (
+                            explicit_count
+                            if explicit_count and len(matched_rooms) == 1
+                            else room.estimated_appliance_connection_count
+                        )
+                        room.estimated_appliance_connection_count = max(
+                            room.estimated_appliance_connection_count, baseline
+                        )
 
-        if any(keyword in normalized for keyword in ("downlight", "downlights", "spotlight", "spotlights")):
-            explicit_count = _extract_explicit_count(normalized)
-            for room in matched_rooms:
-                if explicit_count is not None and len(matched_rooms) == 1:
-                    room.estimated_downlight_count = max(room.estimated_downlight_count, explicit_count)
-                    room.estimated_lighting_point_count = max(room.estimated_lighting_point_count, explicit_count)
-                elif explicit_count is not None:
-                    room.estimated_downlight_count = max(room.estimated_downlight_count, explicit_count / len(matched_rooms))
-                    room.estimated_lighting_point_count = max(room.estimated_lighting_point_count, explicit_count / len(matched_rooms))
-                elif room.estimated_downlight_count <= 0:
-                    room.estimated_downlight_count = max(room.estimated_downlight_count, room.estimated_lighting_point_count)
-
-        if ("extractor" in normalized or "fan" in normalized) and any(
-            keyword in normalized for keyword in ("duct", "ducting", "ducted", "vent to outside")
+        if any(
+            keyword in normalized
+            for keyword in ("downlight", "downlights", "spotlight", "spotlights")
         ):
             explicit_count = _extract_explicit_count(normalized)
             for room in matched_rooms:
-                baseline = explicit_count if explicit_count and len(matched_rooms) == 1 else 1.0
-                room.estimated_ducted_extractor_count = max(room.estimated_ducted_extractor_count, baseline)
-                room.estimated_extractor_fan_count = max(room.estimated_extractor_fan_count, baseline)
+                if explicit_count is not None and len(matched_rooms) == 1:
+                    room.estimated_downlight_count = max(
+                        room.estimated_downlight_count, explicit_count
+                    )
+                    room.estimated_lighting_point_count = max(
+                        room.estimated_lighting_point_count, explicit_count
+                    )
+                elif explicit_count is not None:
+                    room.estimated_downlight_count = max(
+                        room.estimated_downlight_count,
+                        explicit_count / len(matched_rooms),
+                    )
+                    room.estimated_lighting_point_count = max(
+                        room.estimated_lighting_point_count,
+                        explicit_count / len(matched_rooms),
+                    )
+                elif room.estimated_downlight_count <= 0:
+                    room.estimated_downlight_count = max(
+                        room.estimated_downlight_count,
+                        room.estimated_lighting_point_count,
+                    )
 
-        if any(keyword in normalized for keyword in ("hardwire", "hardwired", "hardwiring")) and any(
-            keyword in normalized for keyword in ("appliance", "appliances", "oven", "hob", "extractor", "dishwasher", "fridge", "freezer", "washing", "dryer")
+        if ("extractor" in normalized or "fan" in normalized) and any(
+            keyword in normalized
+            for keyword in ("duct", "ducting", "ducted", "vent to outside")
+        ):
+            explicit_count = _extract_explicit_count(normalized)
+            for room in matched_rooms:
+                baseline = (
+                    explicit_count
+                    if explicit_count and len(matched_rooms) == 1
+                    else 1.0
+                )
+                room.estimated_ducted_extractor_count = max(
+                    room.estimated_ducted_extractor_count, baseline
+                )
+                room.estimated_extractor_fan_count = max(
+                    room.estimated_extractor_fan_count, baseline
+                )
+
+        if any(
+            keyword in normalized for keyword in ("hardwire", "hardwired", "hardwiring")
+        ) and any(
+            keyword in normalized
+            for keyword in (
+                "appliance",
+                "appliances",
+                "oven",
+                "hob",
+                "extractor",
+                "dishwasher",
+                "fridge",
+                "freezer",
+                "washing",
+                "dryer",
+            )
         ):
             explicit_count = _extract_explicit_count(normalized)
             for room in matched_rooms:
@@ -532,14 +666,31 @@ def _apply_explicit_sanitary_overrides(
                     if explicit_count is not None and len(matched_rooms) == 1
                     else max(room.estimated_hardwired_appliance_count, 1.0)
                 )
-                room.estimated_hardwired_appliance_count = max(room.estimated_hardwired_appliance_count, baseline)
-                room.estimated_appliance_connection_count = max(room.estimated_appliance_connection_count, baseline)
+                room.estimated_hardwired_appliance_count = max(
+                    room.estimated_hardwired_appliance_count, baseline
+                )
+                room.estimated_appliance_connection_count = max(
+                    room.estimated_appliance_connection_count, baseline
+                )
 
         if "client supply" in normalized and any(
-            keyword in normalized for keyword in ("sanitary", "sanitaryware", "wc", "toilet", "basin", "bath", "shower", "sink", "vanity")
+            keyword in normalized
+            for keyword in (
+                "sanitary",
+                "sanitaryware",
+                "wc",
+                "toilet",
+                "basin",
+                "bath",
+                "shower",
+                "sink",
+                "vanity",
+            )
         ):
             for room in matched_rooms:
-                room.estimated_sanitary_set_count = max(room.estimated_sanitary_set_count, 1.0)
+                room.estimated_sanitary_set_count = max(
+                    room.estimated_sanitary_set_count, 1.0
+                )
 
         for room in matched_rooms:
             _rebuild_room_second_fix_points(room)
@@ -549,14 +700,19 @@ def _apply_explicit_sanitary_overrides(
 
 def _has_project_scope(project_scopes: list[str], *keywords: str) -> bool:
     normalized_scopes = [scope.lower() for scope in project_scopes]
-    return any(all(keyword in scope for keyword in keywords) for scope in normalized_scopes)
+    return any(
+        all(keyword in scope for keyword in keywords) for scope in normalized_scopes
+    )
 
 
-def _extension_candidate_rooms(rooms: list[ExtractedRoom], project_scopes: list[str]) -> list[ExtractedRoom]:
+def _extension_candidate_rooms(
+    rooms: list[ExtractedRoom], project_scopes: list[str]
+) -> list[ExtractedRoom]:
     candidates = [
         room
         for room in rooms
-        if room.level.lower() == "ground floor" and any(token in room.name.lower() for token in {"rear", "extension"})
+        if room.level.lower() == "ground floor"
+        and any(token in room.name.lower() for token in {"rear", "extension"})
     ]
     if candidates:
         return candidates
@@ -564,7 +720,8 @@ def _extension_candidate_rooms(rooms: list[ExtractedRoom], project_scopes: list[
         return [
             room
             for room in rooms
-            if room.level.lower() == "ground floor" and any(token in room.name.lower() for token in {"kitchen", "dining"})
+            if room.level.lower() == "ground floor"
+            and any(token in room.name.lower() for token in {"kitchen", "dining"})
         ][:1]
     return []
 
@@ -588,7 +745,9 @@ def build_room_takeoff(rooms: list[ExtractedRoom]) -> list[ExtractedRoomTakeoff]
                 estimated_wall_finish_area_m2=_estimate_room_wall_finish_area(room),
                 estimated_ceiling_finish_area_m2=_round(room.area_m2),
                 estimated_skirting_lm=_estimate_room_skirting_lm(room),
-                estimated_wall_tiling_area_m2=_estimate_room_wall_tiling_area(room, room_type),
+                estimated_wall_tiling_area_m2=_estimate_room_wall_tiling_area(
+                    room, room_type
+                ),
                 estimated_floor_finish_area_m2=_round(room.area_m2),
                 estimated_plumbing_points=estimated_plumbing_points,
                 estimated_wc_count=fixture_counts["estimated_wc_count"],
@@ -596,10 +755,18 @@ def build_room_takeoff(rooms: list[ExtractedRoom]) -> list[ExtractedRoomTakeoff]
                 estimated_bath_count=fixture_counts["estimated_bath_count"],
                 estimated_shower_count=fixture_counts["estimated_shower_count"],
                 estimated_sink_count=fixture_counts["estimated_sink_count"],
-                estimated_sanitary_set_count=fixture_counts["estimated_sanitary_set_count"],
-                estimated_vanity_unit_count=fixture_counts["estimated_vanity_unit_count"],
-                estimated_concealed_cistern_count=fixture_counts["estimated_concealed_cistern_count"],
-                estimated_appliance_connection_count=fixture_counts["estimated_appliance_connection_count"],
+                estimated_sanitary_set_count=fixture_counts[
+                    "estimated_sanitary_set_count"
+                ],
+                estimated_vanity_unit_count=fixture_counts[
+                    "estimated_vanity_unit_count"
+                ],
+                estimated_concealed_cistern_count=fixture_counts[
+                    "estimated_concealed_cistern_count"
+                ],
+                estimated_appliance_connection_count=fixture_counts[
+                    "estimated_appliance_connection_count"
+                ],
                 estimated_socket_count=estimated_socket_count,
                 estimated_switch_count=estimated_switch_count,
                 estimated_lighting_point_count=estimated_lighting_point_count,
@@ -608,7 +775,10 @@ def build_room_takeoff(rooms: list[ExtractedRoom]) -> list[ExtractedRoomTakeoff]
                 estimated_ducted_extractor_count=0.0,
                 estimated_hardwired_appliance_count=0.0,
                 estimated_electrical_second_fix_points=_round(
-                    estimated_socket_count + estimated_switch_count + estimated_lighting_point_count + estimated_extractor_fan_count
+                    estimated_socket_count
+                    + estimated_switch_count
+                    + estimated_lighting_point_count
+                    + estimated_extractor_fan_count
                 ),
                 estimated_plumbing_second_fix_points=estimated_plumbing_points,
             )
@@ -624,7 +794,9 @@ def _iter_section_lines(sections: list[ExtractedSection], *section_keys: str):
             yield line
 
 
-def _find_count(sections: list[ExtractedSection], section_key: str, *keywords: str) -> int:
+def _find_count(
+    sections: list[ExtractedSection], section_key: str, *keywords: str
+) -> int:
     total = 0.0
     for section in sections:
         if section.key != section_key:
@@ -636,7 +808,9 @@ def _find_count(sections: list[ExtractedSection], section_key: str, *keywords: s
     return int(total)
 
 
-def _find_measure(sections: list[ExtractedSection], section_key: str, *keywords: str) -> float:
+def _find_measure(
+    sections: list[ExtractedSection], section_key: str, *keywords: str
+) -> float:
     total = 0.0
     for section in sections:
         if section.key != section_key:
@@ -648,7 +822,9 @@ def _find_measure(sections: list[ExtractedSection], section_key: str, *keywords:
     return total
 
 
-def _sum_dimension_volume(sections: list[ExtractedSection], section_key: str, *keywords: str) -> float:
+def _sum_dimension_volume(
+    sections: list[ExtractedSection], section_key: str, *keywords: str
+) -> float:
     total = 0.0
     for section in sections:
         if section.key != section_key:
@@ -660,7 +836,9 @@ def _sum_dimension_volume(sections: list[ExtractedSection], section_key: str, *k
     return total
 
 
-def _sum_dimension_area(sections: list[ExtractedSection], section_key: str, *keywords: str) -> float:
+def _sum_dimension_area(
+    sections: list[ExtractedSection], section_key: str, *keywords: str
+) -> float:
     total = 0.0
     for section in sections:
         if section.key != section_key:
@@ -672,7 +850,9 @@ def _sum_dimension_area(sections: list[ExtractedSection], section_key: str, *key
     return total
 
 
-def _extract_percent_from_lines(sections: list[ExtractedSection], section_keys: tuple[str, ...], *keywords: str) -> float:
+def _extract_percent_from_lines(
+    sections: list[ExtractedSection], section_keys: tuple[str, ...], *keywords: str
+) -> float:
     for line in _iter_section_lines(sections, *section_keys):
         normalized = line.lower()
         if not all(keyword in normalized for keyword in keywords):
@@ -702,7 +882,9 @@ def _collect_level_hits(
                 continue
             if not predicate(normalized):
                 continue
-            explicit_levels = {level for level in _LEVEL_AREA_LOOKUP if level in normalized}
+            explicit_levels = {
+                level for level in _LEVEL_AREA_LOOKUP if level in normalized
+            }
             if explicit_levels:
                 levels.update(explicit_levels)
                 continue
@@ -757,7 +939,16 @@ def _estimate_boarding_coverage(
         sections,
         ("ceilings_and_insulation", "structure", "carpentry"),
         lambda line: ("plasterboard" in line or "board" in line)
-        and any(keyword in line for keyword in ("rafter", "roof", "dormer", "insulated board", "board under")),
+        and any(
+            keyword in line
+            for keyword in (
+                "rafter",
+                "roof",
+                "dormer",
+                "insulated board",
+                "board under",
+            )
+        ),
     )
 
     coverage = _sum_levels(
@@ -789,13 +980,40 @@ def _estimate_insulation_coverage(
     floor_levels, floor_general = _collect_level_hits(
         sections,
         ("structure", "carpentry", "ceilings_and_insulation", "plumbing"),
-        lambda line: any(keyword in line for keyword in ("insulation", "acoustic", "pir", "same floor build-up", "same floor buildup"))
-        and not any(keyword in line for keyword in ("rafter", "warm roof", "roof insulation", "insulated board under")),
+        lambda line: any(
+            keyword in line
+            for keyword in (
+                "insulation",
+                "acoustic",
+                "pir",
+                "same floor build-up",
+                "same floor buildup",
+            )
+        )
+        and not any(
+            keyword in line
+            for keyword in (
+                "rafter",
+                "warm roof",
+                "roof insulation",
+                "insulated board under",
+            )
+        ),
     )
     roof_levels, roof_general = _collect_level_hits(
         sections,
         ("structure", "ceilings_and_insulation"),
-        lambda line: any(keyword in line for keyword in ("warm roof", "between rafters", "under rafters", "roof insulation", "insulated board", "rafter"))
+        lambda line: any(
+            keyword in line
+            for keyword in (
+                "warm roof",
+                "between rafters",
+                "under rafters",
+                "roof insulation",
+                "insulated board",
+                "rafter",
+            )
+        )
         or ("pir" in line and "roof" in line),
     )
 
@@ -823,9 +1041,14 @@ def _estimate_loft_roof_finish_area(
     if not loft_area_m2 and not dormer_area_m2:
         return 0.0
     has_loft_roof_scope = False
-    for line in _iter_section_lines(sections, "structure", "ceilings_and_insulation", "carpentry"):
+    for line in _iter_section_lines(
+        sections, "structure", "ceilings_and_insulation", "carpentry"
+    ):
         normalized = line.lower()
-        if any(keyword in normalized for keyword in ("loft", "dormer", "rafter", "warm roof", "roof", "skylight")):
+        if any(
+            keyword in normalized
+            for keyword in ("loft", "dormer", "rafter", "warm roof", "roof", "skylight")
+        ):
             has_loft_roof_scope = True
             break
     if not has_loft_roof_scope:
@@ -862,7 +1085,10 @@ def _estimate_extension_flat_roof_area(
         return 0.0
     if roof_area_m2:
         return _round(roof_area_m2)
-    if _has_project_scope(project_scopes, "rear", "extension") and extension_slab_area_m2:
+    if (
+        _has_project_scope(project_scopes, "rear", "extension")
+        and extension_slab_area_m2
+    ):
         return _round(extension_slab_area_m2)
     return 0.0
 
@@ -879,12 +1105,22 @@ def _estimate_extension_external_wall_area(
         width_m = max(room.width_m, room.length_m)
         depth_m = min(room.width_m, room.length_m)
         exposed_perimeter = width_m + (2 * depth_m)
-        total += exposed_perimeter * _LEVEL_WALL_HEIGHTS_M["ground floor"] * _OPENING_DEDUCTION_FACTOR
+        total += (
+            exposed_perimeter
+            * _LEVEL_WALL_HEIGHTS_M["ground floor"]
+            * _OPENING_DEDUCTION_FACTOR
+        )
     if total > 0:
         return _round(total)
-    if extension_slab_area_m2 and _has_project_scope(project_scopes, "rear", "extension"):
-        estimated_open_perimeter = 3 * (extension_slab_area_m2 ** 0.5)
-        return _round(estimated_open_perimeter * _LEVEL_WALL_HEIGHTS_M["ground floor"] * _OPENING_DEDUCTION_FACTOR)
+    if extension_slab_area_m2 and _has_project_scope(
+        project_scopes, "rear", "extension"
+    ):
+        estimated_open_perimeter = 3 * (extension_slab_area_m2**0.5)
+        return _round(
+            estimated_open_perimeter
+            * _LEVEL_WALL_HEIGHTS_M["ground floor"]
+            * _OPENING_DEDUCTION_FACTOR
+        )
     return 0.0
 
 
@@ -894,8 +1130,12 @@ def _estimate_roof_removal_area(
     loft_area_m2: float,
     dormer_area_m2: float,
 ) -> float:
-    explicit_demolition_area = _round(_sum_dimension_area(sections, "demolition", "roof"))
-    removal_pct = _extract_percent_from_lines(sections, ("structure", "demolition"), "roof", "removal")
+    explicit_demolition_area = _round(
+        _sum_dimension_area(sections, "demolition", "roof")
+    )
+    removal_pct = _extract_percent_from_lines(
+        sections, ("structure", "demolition"), "roof", "removal"
+    )
     if removal_pct:
         removal_base = loft_area_m2 + dormer_area_m2
         if removal_base:
@@ -912,7 +1152,9 @@ def _extract_trench_foundation_volume(sections: list[ExtractedSection]) -> float
     return 0.0
 
 
-def _extract_door_allowance(sections: list[ExtractedSection], door_set_count: int) -> float:
+def _extract_door_allowance(
+    sections: list[ExtractedSection], door_set_count: int
+) -> float:
     for section in sections:
         if section.key != "doors":
             continue
@@ -928,7 +1170,10 @@ def _extract_fire_rated_door_set_count(sections: list[ExtractedSection]) -> floa
         sections,
         ("doors",),
         predicate=lambda line, _context: "door" in line
-        and any(keyword in line for keyword in ("fire-rated", "fire rated", "fd30", "fd60", "fd90")),
+        and any(
+            keyword in line
+            for keyword in ("fire-rated", "fire rated", "fd30", "fd60", "fd90")
+        ),
         default_when_mentioned=1.0,
     )
 
@@ -942,13 +1187,18 @@ def _extract_pocket_door_set_count(sections: list[ExtractedSection]) -> float:
     )
 
 
-def _extract_fire_rated_pocket_door_set_count(sections: list[ExtractedSection]) -> float:
+def _extract_fire_rated_pocket_door_set_count(
+    sections: list[ExtractedSection],
+) -> float:
     return _extract_contextual_line_count(
         sections,
         ("doors",),
         predicate=lambda line, _context: "pocket" in line
         and "door" in line
-        and any(keyword in line for keyword in ("fire-rated", "fire rated", "fd30", "fd60", "fd90")),
+        and any(
+            keyword in line
+            for keyword in ("fire-rated", "fire rated", "fd30", "fd60", "fd90")
+        ),
         default_when_mentioned=1.0,
     )
 
@@ -957,7 +1207,9 @@ def _extract_double_pocket_door_set_count(sections: list[ExtractedSection]) -> f
     return _extract_contextual_line_count(
         sections,
         ("doors",),
-        predicate=lambda line, _context: "double" in line and "pocket" in line and "door" in line,
+        predicate=lambda line, _context: "double" in line
+        and "pocket" in line
+        and "door" in line,
         default_when_mentioned=1.0,
     )
 
@@ -966,7 +1218,9 @@ def _extract_staircase_count(sections: list[ExtractedSection]) -> float:
     return _extract_contextual_line_count(
         sections,
         ("joinery", "carpentry"),
-        predicate=lambda line, _context: any(keyword in line for keyword in ("staircase", "stairs", "stair")),
+        predicate=lambda line, _context: any(
+            keyword in line for keyword in ("staircase", "stairs", "stair")
+        ),
         default_when_mentioned=1.0,
     )
 
@@ -1003,7 +1257,9 @@ def _has_explicit_line_scope(
     return False
 
 
-def _derive_architrave_set_count(sections: list[ExtractedSection], door_set_count: int) -> float:
+def _derive_architrave_set_count(
+    sections: list[ExtractedSection], door_set_count: int
+) -> float:
     if not door_set_count:
         return 0.0
     if _has_explicit_line_scope(
@@ -1044,7 +1300,11 @@ def _derive_window_board_metrics(
                 name = item.name.lower()
                 if "window" not in name or "velux" in name:
                     continue
-                dims_match = re.search(r"\((\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)\)", item.raw_text, re.IGNORECASE)
+                dims_match = re.search(
+                    r"\((\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)\)",
+                    item.raw_text,
+                    re.IGNORECASE,
+                )
                 if dims_match:
                     total_lm += float(dims_match.group(1)) * item.quantity
                 total_count += item.quantity
@@ -1062,7 +1322,9 @@ def build_takeoff_summary(
     room_takeoff: list[ExtractedRoomTakeoff] | None = None,
 ) -> StructuredTakeoffSummary:
     project_scopes = project_scopes or []
-    basement_area_m2 = _sum_room_area(rooms, "Basement") + _sum_room_area(rooms, "Lower Ground Floor")
+    basement_area_m2 = _sum_room_area(rooms, "Basement") + _sum_room_area(
+        rooms, "Lower Ground Floor"
+    )
     ground_floor_area_m2 = _sum_room_area(rooms, "Ground Floor")
     first_floor_area_m2 = _sum_room_area(rooms, "First Floor")
     second_floor_area_m2 = _sum_room_area(rooms, "Second Floor")
@@ -1072,12 +1334,20 @@ def build_takeoff_summary(
     estimated_ceiling_finish_area_m2 = _sum_estimated_ceiling_area(rooms)
     estimated_skirting_lm = _sum_estimated_skirting_lm(rooms)
     room_takeoff = room_takeoff or build_room_takeoff(rooms)
-    estimated_hard_floor_scope_area_m2, estimated_carpet_scope_area_m2 = _estimate_flooring_scope_areas(sections, room_takeoff)
-    wet_rooms = [room for room in room_takeoff if room.room_type in {"bathroom", "ensuite", "shower_room", "wc"}]
+    estimated_hard_floor_scope_area_m2, estimated_carpet_scope_area_m2 = (
+        _estimate_flooring_scope_areas(sections, room_takeoff)
+    )
+    wet_rooms = [
+        room
+        for room in room_takeoff
+        if room.room_type in {"bathroom", "ensuite", "shower_room", "wc"}
+    ]
     client_supply_sanitaryware = _has_client_supply_sanitaryware(sections)
     client_supply_appliances = _has_client_supply_appliances(sections)
 
-    pad_foundation_volume_m3 = _round(_sum_dimension_volume(sections, "groundworks", "pad foundations"))
+    pad_foundation_volume_m3 = _round(
+        _sum_dimension_volume(sections, "groundworks", "pad foundations")
+    )
     trench_foundation_volume_m3 = _extract_trench_foundation_volume(sections)
     internal_foundation_volume_m3 = _round(
         _sum_dimension_volume(sections, "groundworks", "internal foundation")
@@ -1159,7 +1429,9 @@ def build_takeoff_summary(
         required_keywords=("downlight", "downlights", "spotlight", "spotlights"),
     )
     if downlight_count <= 0:
-        downlight_count = _round(sum(room.estimated_downlight_count for room in room_takeoff))
+        downlight_count = _round(
+            sum(room.estimated_downlight_count for room in room_takeoff)
+        )
     ducted_extractor_count = _extract_explicit_feature_count(
         sections,
         ("electrical", "full_scope"),
@@ -1167,19 +1439,36 @@ def build_takeoff_summary(
         secondary_keywords=("duct", "ducting", "ducted", "vent to outside"),
     )
     if ducted_extractor_count <= 0:
-        ducted_extractor_count = _round(sum(room.estimated_ducted_extractor_count for room in room_takeoff))
+        ducted_extractor_count = _round(
+            sum(room.estimated_ducted_extractor_count for room in room_takeoff)
+        )
     hardwired_appliance_count = _extract_explicit_feature_count(
         sections,
         ("electrical", "full_scope", "joinery"),
         required_keywords=("hardwire", "hardwired", "hardwiring"),
-        secondary_keywords=("appliance", "appliances", "oven", "hob", "extractor", "dishwasher", "fridge", "freezer", "washing", "dryer"),
+        secondary_keywords=(
+            "appliance",
+            "appliances",
+            "oven",
+            "hob",
+            "extractor",
+            "dishwasher",
+            "fridge",
+            "freezer",
+            "washing",
+            "dryer",
+        ),
     )
     if hardwired_appliance_count <= 0:
-        hardwired_appliance_count = _round(sum(room.estimated_hardwired_appliance_count for room in room_takeoff))
+        hardwired_appliance_count = _round(
+            sum(room.estimated_hardwired_appliance_count for room in room_takeoff)
+        )
     door_set_count = _find_count(sections, "doors", "door")
     fire_rated_door_set_count = _extract_fire_rated_door_set_count(sections)
     pocket_door_set_count = _extract_pocket_door_set_count(sections)
-    fire_rated_pocket_door_set_count = _extract_fire_rated_pocket_door_set_count(sections)
+    fire_rated_pocket_door_set_count = _extract_fire_rated_pocket_door_set_count(
+        sections
+    )
     double_pocket_door_set_count = _extract_double_pocket_door_set_count(sections)
     staircase_count = _extract_staircase_count(sections)
     storage_door_set_count = _extract_storage_door_set_count(sections)
@@ -1216,30 +1505,56 @@ def build_takeoff_summary(
         estimated_roof_removal_area_m2=estimated_roof_removal_area_m2,
         estimated_dormer_build_area_m2=dormer_area_m2,
         wet_room_count=len(wet_rooms),
-        estimated_wet_room_wall_tiling_area_m2=_round(sum(room.estimated_wall_tiling_area_m2 for room in wet_rooms)),
-        estimated_wet_room_floor_tiling_area_m2=_round(sum(room.estimated_floor_finish_area_m2 for room in wet_rooms)),
+        estimated_wet_room_wall_tiling_area_m2=_round(
+            sum(room.estimated_wall_tiling_area_m2 for room in wet_rooms)
+        ),
+        estimated_wet_room_floor_tiling_area_m2=_round(
+            sum(room.estimated_floor_finish_area_m2 for room in wet_rooms)
+        ),
         total_wc_count=_round(sum(room.estimated_wc_count for room in room_takeoff)),
-        total_basin_count=_round(sum(room.estimated_basin_count for room in room_takeoff)),
-        total_bath_count=_round(sum(room.estimated_bath_count for room in room_takeoff)),
-        total_shower_count=_round(sum(room.estimated_shower_count for room in room_takeoff)),
-        total_sink_count=_round(sum(room.estimated_sink_count for room in room_takeoff)),
-        total_sanitary_set_count=_round(sum(room.estimated_sanitary_set_count for room in room_takeoff)),
-        total_vanity_unit_count=_round(sum(room.estimated_vanity_unit_count for room in room_takeoff)),
-        total_concealed_cistern_count=_round(sum(room.estimated_concealed_cistern_count for room in room_takeoff)),
-        total_appliance_connection_count=_round(sum(room.estimated_appliance_connection_count for room in room_takeoff)),
+        total_basin_count=_round(
+            sum(room.estimated_basin_count for room in room_takeoff)
+        ),
+        total_bath_count=_round(
+            sum(room.estimated_bath_count for room in room_takeoff)
+        ),
+        total_shower_count=_round(
+            sum(room.estimated_shower_count for room in room_takeoff)
+        ),
+        total_sink_count=_round(
+            sum(room.estimated_sink_count for room in room_takeoff)
+        ),
+        total_sanitary_set_count=_round(
+            sum(room.estimated_sanitary_set_count for room in room_takeoff)
+        ),
+        total_vanity_unit_count=_round(
+            sum(room.estimated_vanity_unit_count for room in room_takeoff)
+        ),
+        total_concealed_cistern_count=_round(
+            sum(room.estimated_concealed_cistern_count for room in room_takeoff)
+        ),
+        total_appliance_connection_count=_round(
+            sum(room.estimated_appliance_connection_count for room in room_takeoff)
+        ),
         consumer_unit_count=consumer_unit_count,
         downlight_count=downlight_count,
         ducted_extractor_count=ducted_extractor_count,
         hardwired_appliance_count=hardwired_appliance_count,
         client_supply_sanitaryware=client_supply_sanitaryware,
         client_supply_appliances=client_supply_appliances,
-        estimated_electrical_second_fix_points=_round(sum(room.estimated_electrical_second_fix_points for room in room_takeoff)),
-        estimated_plumbing_second_fix_points=_round(sum(room.estimated_plumbing_second_fix_points for room in room_takeoff)),
+        estimated_electrical_second_fix_points=_round(
+            sum(room.estimated_electrical_second_fix_points for room in room_takeoff)
+        ),
+        estimated_plumbing_second_fix_points=_round(
+            sum(room.estimated_plumbing_second_fix_points for room in room_takeoff)
+        ),
         pad_foundation_volume_m3=pad_foundation_volume_m3,
         trench_foundation_volume_m3=trench_foundation_volume_m3,
         internal_foundation_volume_m3=internal_foundation_volume_m3,
         total_foundation_concrete_m3=_round(
-            pad_foundation_volume_m3 + trench_foundation_volume_m3 + internal_foundation_volume_m3
+            pad_foundation_volume_m3
+            + trench_foundation_volume_m3
+            + internal_foundation_volume_m3
         ),
         patio_area_m2=patio_area_m2,
         roof_area_m2=roof_area_m2,

@@ -10,7 +10,10 @@ from app.schemas import CandidateRow
 from app.schemas import LLMPreviewOutput
 from app.schemas import PreviewAcceptedExample
 from app.schemas import ScopeExtractionResponse
-from app.services.prompt_builder import build_preview_system_prompt, build_preview_user_message
+from app.services.prompt_builder import (
+    build_preview_system_prompt,
+    build_preview_user_message,
+)
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -69,10 +72,19 @@ class LLMClient:
         document_context: str | None = None,
     ) -> list[dict[str, str]]:
         return [
-            {"role": "system", "content": build_preview_system_prompt(retry_mode=retry_mode)},
+            {
+                "role": "system",
+                "content": build_preview_system_prompt(retry_mode=retry_mode),
+            },
             {
                 "role": "user",
-                "content": build_preview_user_message(prompt, candidate_rows, extracted_scope, accepted_examples, document_context),
+                "content": build_preview_user_message(
+                    prompt,
+                    candidate_rows,
+                    extracted_scope,
+                    accepted_examples,
+                    document_context,
+                ),
             },
         ]
 
@@ -109,20 +121,30 @@ class LLMClient:
                 )
                 parsed = getattr(response, "output_parsed", None)
                 if parsed is None:
-                    raise LLMStructuredOutputError("Model returned no parsed structured output.")
+                    raise LLMStructuredOutputError(
+                        "Model returned no parsed structured output."
+                    )
                 usage = getattr(response, "usage", None)
                 return parsed, {
                     "llm_latency_ms": int((perf_counter() - started_at) * 1000),
                     "structured_output_mode": "responses.parse",
                     "usage": {
-                        "prompt_tokens": getattr(usage, "input_tokens", 0) if usage else 0,
-                        "completion_tokens": getattr(usage, "output_tokens", 0) if usage else 0,
-                        "total_tokens": getattr(usage, "total_tokens", 0) if usage else 0,
+                        "prompt_tokens": getattr(usage, "input_tokens", 0)
+                        if usage
+                        else 0,
+                        "completion_tokens": getattr(usage, "output_tokens", 0)
+                        if usage
+                        else 0,
+                        "total_tokens": getattr(usage, "total_tokens", 0)
+                        if usage
+                        else 0,
                     },
                 }
 
             if not self._supports_chat_completions_parse():
-                raise LLMStructuredOutputError("The installed OpenAI SDK does not support structured parsing APIs.")
+                raise LLMStructuredOutputError(
+                    "The installed OpenAI SDK does not support structured parsing APIs."
+                )
 
             started_at = perf_counter()
             response = self.client.beta.chat.completions.parse(
@@ -133,14 +155,18 @@ class LLMClient:
             )
             parsed = response.choices[0].message.parsed if response.choices else None
             if parsed is None:
-                raise LLMStructuredOutputError("Model returned no parsed structured output.")
+                raise LLMStructuredOutputError(
+                    "Model returned no parsed structured output."
+                )
             usage = getattr(response, "usage", None)
             return parsed, {
                 "llm_latency_ms": int((perf_counter() - started_at) * 1000),
                 "structured_output_mode": "chat.completions.parse",
                 "usage": {
                     "prompt_tokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
-                    "completion_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
+                    "completion_tokens": getattr(usage, "completion_tokens", 0)
+                    if usage
+                    else 0,
                     "total_tokens": getattr(usage, "total_tokens", 0) if usage else 0,
                 },
             }
@@ -164,7 +190,11 @@ class LLMClient:
             raise RuntimeError("LLM client is not configured.")
 
         last_error: Exception | None = None
-        structured_output_mode = "responses.parse" if self._supports_responses_parse() else "chat.completions.parse"
+        structured_output_mode = (
+            "responses.parse"
+            if self._supports_responses_parse()
+            else "chat.completions.parse"
+        )
         self.last_preview_metadata = {}
         for attempt_number, retry_mode in enumerate((False, True), start=1):
             for request_attempt in range(1, settings.openai_request_max_attempts + 1):
@@ -185,8 +215,11 @@ class LLMClient:
                     logger.info(
                         "LLM preview completed model=%s latency=%dms "
                         "prompt_tokens=%s completion_tokens=%s total_tokens=%s attempt=%d",
-                        self.model, latency_ms,
-                        prompt_tokens, completion_tokens, total_tokens,
+                        self.model,
+                        latency_ms,
+                        prompt_tokens,
+                        completion_tokens,
+                        total_tokens,
                         attempt_number,
                     )
                     self.last_preview_metadata = {
@@ -194,7 +227,10 @@ class LLMClient:
                         "llm_latency_ms": latency_ms,
                         "llm_request_attempt_count": request_attempt,
                         "parse_retry_used": retry_mode,
-                        "structured_output_mode": request_metadata.get("structured_output_mode", structured_output_mode) or structured_output_mode,
+                        "structured_output_mode": request_metadata.get(
+                            "structured_output_mode", structured_output_mode
+                        )
+                        or structured_output_mode,
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                         "total_tokens": total_tokens,
@@ -226,4 +262,6 @@ class LLMClient:
             if retry_mode:
                 break
 
-        raise last_error or LLMStructuredOutputError("Failed to get a structured preview response from the model.")
+        raise last_error or LLMStructuredOutputError(
+            "Failed to get a structured preview response from the model."
+        )

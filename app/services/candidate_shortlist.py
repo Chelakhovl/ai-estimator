@@ -4,31 +4,135 @@ from collections import Counter, defaultdict
 from math import log
 
 from app.schemas import CandidateRow
-from app.services.normalizer import expand_tokens, normalize_unit, split_prompt_segments, tokenize, tokenize_terms
+from app.services.normalizer import (
+    expand_tokens,
+    normalize_unit,
+    split_prompt_segments,
+    tokenize,
+    tokenize_terms,
+)
 from app.services.scope_parsing import infer_section_keys_from_label, normalize_heading
 
 _SECTION_GROUP_HINTS: dict[str, set[str]] = {
     "demolition": {"demolition", "remove", "strip", "waste"},
-    "groundworks": {"ground", "groundwork", "excavate", "foundation", "concrete", "trench", "patio", "driveway"},
+    "groundworks": {
+        "ground",
+        "groundwork",
+        "excavate",
+        "foundation",
+        "concrete",
+        "trench",
+        "patio",
+        "driveway",
+    },
     "steelworks": {"steel", "beam", "column", "post", "junction", "connection"},
-    "structure": {"structure", "structural", "roof", "brick", "block", "masonry", "dormer"},
+    "structure": {
+        "structure",
+        "structural",
+        "roof",
+        "brick",
+        "block",
+        "masonry",
+        "dormer",
+    },
     "carpentry": {"carpentry", "timber", "stud", "frame", "joist", "chipboard"},
-    "ceilings_and_insulation": {"ceiling", "plasterboard", "board", "insulation", "pir", "acoustic", "rafter"},
+    "ceilings_and_insulation": {
+        "ceiling",
+        "plasterboard",
+        "board",
+        "insulation",
+        "pir",
+        "acoustic",
+        "rafter",
+    },
     "doors": {"door", "frame", "pocket", "fire"},
-    "joinery": {"joinery", "cabinet", "cupboard", "storage", "wardrobe", "worktop", "stair"},
-    "plastering": {"plastering", "plaster", "plasterboard", "skim", "render", "wall", "ceiling"},
+    "joinery": {
+        "joinery",
+        "cabinet",
+        "cupboard",
+        "storage",
+        "wardrobe",
+        "worktop",
+        "stair",
+    },
+    "plastering": {
+        "plastering",
+        "plaster",
+        "plasterboard",
+        "skim",
+        "render",
+        "wall",
+        "ceiling",
+    },
     "tiling": {"tiling", "tile", "grout", "splashback"},
-    "plumbing": {"plumbing", "plumb", "sanitary", "basin", "bath", "shower", "sink", "toilet", "wc", "radiator"},
-    "heating": {"heating", "heat", "boiler", "cylinder", "megaflo", "gas", "ufh", "radiator"},
-    "electrical": {"electrical", "electric", "socket", "switch", "downlight", "light", "rewire", "consumer", "extractor", "outlet", "fitting", "thermostat", "appliance", "oven", "hob"},
+    "plumbing": {
+        "plumbing",
+        "plumb",
+        "sanitary",
+        "basin",
+        "bath",
+        "shower",
+        "sink",
+        "toilet",
+        "wc",
+        "radiator",
+    },
+    "heating": {
+        "heating",
+        "heat",
+        "boiler",
+        "cylinder",
+        "megaflo",
+        "gas",
+        "ufh",
+        "radiator",
+    },
+    "electrical": {
+        "electrical",
+        "electric",
+        "socket",
+        "switch",
+        "downlight",
+        "light",
+        "rewire",
+        "consumer",
+        "extractor",
+        "outlet",
+        "fitting",
+        "thermostat",
+        "appliance",
+        "oven",
+        "hob",
+    },
     "decorating": {"decorating", "painting", "decorate", "paint", "mist", "coat"},
-    "flooring": {"flooring", "floor", "carpet", "vinyl", "laminate", "timber", "engineered", "wood"},
+    "flooring": {
+        "flooring",
+        "floor",
+        "carpet",
+        "vinyl",
+        "laminate",
+        "timber",
+        "engineered",
+        "wood",
+    },
     "windows": {"window", "glazing", "velux", "rooflight", "skylight"},
     "woodwork_painting": {"woodwork", "skirting", "architrave", "stair", "door"},
-    "preliminaries": {"prelim", "protection", "toilet", "welfare", "management", "delivery", "site", "wait", "load"},
+    "preliminaries": {
+        "prelim",
+        "protection",
+        "toilet",
+        "welfare",
+        "management",
+        "delivery",
+        "site",
+        "wait",
+        "load",
+    },
 }
 _ACTIVE_SECTION_GROUP_LIMIT = 35
 _MIN_ROWS_PER_ACTIVE_SECTION = 8
+
+
 def _combined_candidate_text(row: CandidateRow) -> str:
     return " ".join(
         filter(
@@ -51,7 +155,9 @@ def _tokenize_candidate_document(row: CandidateRow) -> list[str]:
     return tokenize_terms(_combined_candidate_text(row))
 
 
-def _build_document_frequencies(candidate_rows: list[CandidateRow]) -> tuple[dict[str, int], float]:
+def _build_document_frequencies(
+    candidate_rows: list[CandidateRow],
+) -> tuple[dict[str, int], float]:
     document_frequency: Counter[str] = Counter()
     total_terms = 0
 
@@ -88,7 +194,9 @@ def _bm25_score(
         df = document_frequency.get(term, 0)
         idf = log(1 + (document_count - df + 0.5) / (df + 0.5))
         numerator = frequency * (k1 + 1)
-        denominator = frequency + k1 * (1 - b + b * (document_length / max(average_document_length, 1.0)))
+        denominator = frequency + k1 * (
+            1 - b + b * (document_length / max(average_document_length, 1.0))
+        )
         score += idf * (numerator / denominator)
 
     return score
@@ -109,7 +217,11 @@ def _score_candidate(
     work_tokens = expand_tokens(tokenize(row.WorkName))
     context_tokens = expand_tokens(tokenize(_combined_candidate_text(row)))
     group_tokens = expand_tokens(tokenize(row.WorkGroupName or ""))
-    overlap = len(prompt_tokens & work_tokens) * 3 + len(prompt_tokens & context_tokens) + len(prompt_tokens & group_tokens) * 2
+    overlap = (
+        len(prompt_tokens & work_tokens) * 3
+        + len(prompt_tokens & context_tokens)
+        + len(prompt_tokens & group_tokens) * 2
+    )
     document_terms = _tokenize_candidate_document(row)
     document_bigrams = _build_bigrams(document_terms)
     phrase_bonus = len(prompt_bigrams & document_bigrams) * 2.5
@@ -156,14 +268,18 @@ def _candidate_section_keys(row: CandidateRow) -> set[str]:
     return keys
 
 
-def _row_matches_section_hints(row: CandidateRow, section_key: str, hints: set[str]) -> bool:
+def _row_matches_section_hints(
+    row: CandidateRow, section_key: str, hints: set[str]
+) -> bool:
     if section_key in _candidate_section_keys(row):
         return True
     haystack = _combined_candidate_text(row).lower()
     return any(hint in haystack for hint in hints)
 
 
-def _active_section_alignment_bonus(row: CandidateRow, active_section_keys: set[str]) -> float:
+def _active_section_alignment_bonus(
+    row: CandidateRow, active_section_keys: set[str]
+) -> float:
     if not active_section_keys:
         return 0.0
     candidate_sections = _candidate_section_keys(row)
@@ -182,93 +298,189 @@ def _quality_adjustment(prompt_text: str, row: CandidateRow) -> float:
     adjustment = 0.0
 
     if work_name.startswith("building control fee") and not any(
-        keyword in lowered_prompt for keyword in ("building control", "control fee", "certificate", "inspection")
+        keyword in lowered_prompt
+        for keyword in ("building control", "control fee", "certificate", "inspection")
     ):
         adjustment -= 6.0
 
     if work_name.startswith("general electrics") and any(
         keyword in lowered_prompt
-        for keyword in ("socket", "switch", "spotlight", "spotlights", "downlight", "light", "extractor", "appliance")
+        for keyword in (
+            "socket",
+            "switch",
+            "spotlight",
+            "spotlights",
+            "downlight",
+            "light",
+            "extractor",
+            "appliance",
+        )
     ):
         adjustment -= 4.5
 
     if work_name.startswith("general plumbing") and any(
-        keyword in lowered_prompt for keyword in ("radiator", "basin", "bath", "shower", "toilet", "wc", "sanitary")
+        keyword in lowered_prompt
+        for keyword in (
+            "radiator",
+            "basin",
+            "bath",
+            "shower",
+            "toilet",
+            "wc",
+            "sanitary",
+        )
     ):
         adjustment -= 4.5
 
     if work_name == "temporary floor protection":
-        if any(keyword in lowered_prompt for keyword in ("site setup", "site protection", "correx", "temporary protection")):
+        if any(
+            keyword in lowered_prompt
+            for keyword in (
+                "site setup",
+                "site protection",
+                "correx",
+                "temporary protection",
+            )
+        ):
             adjustment += 4.0
         else:
             adjustment -= 1.5
 
-    if "light fitting" in work_name and any(keyword in lowered_prompt for keyword in ("spotlight", "spotlights", "downlight", "downlights")):
+    if "light fitting" in work_name and any(
+        keyword in lowered_prompt
+        for keyword in ("spotlight", "spotlights", "downlight", "downlights")
+    ):
         adjustment += 4.0
 
-    if "outlet" in work_name and any(keyword in lowered_prompt for keyword in ("socket", "sockets", "double socket", "double sockets", "outlet")):
+    if "outlet" in work_name and any(
+        keyword in lowered_prompt
+        for keyword in (
+            "socket",
+            "sockets",
+            "double socket",
+            "double sockets",
+            "outlet",
+        )
+    ):
         adjustment += 4.0
 
     if ("skimming walls" in work_name or "plastering walls" in work_name) and any(
-        keyword in lowered_prompt for keyword in ("skim", "skimming", "wall", "walls", "plaster")
+        keyword in lowered_prompt
+        for keyword in ("skim", "skimming", "wall", "walls", "plaster")
     ):
         adjustment += 3.5
 
-    if ("skimming ceiling" in work_name or "plastering ceiling" in work_name or "fixing plasterboard to ceiling" in work_name) and any(
-        keyword in lowered_prompt for keyword in ("ceiling", "ceilings", "plasterboard", "skim", "skimming")
+    if (
+        "skimming ceiling" in work_name
+        or "plastering ceiling" in work_name
+        or "fixing plasterboard to ceiling" in work_name
+    ) and any(
+        keyword in lowered_prompt
+        for keyword in ("ceiling", "ceilings", "plasterboard", "skim", "skimming")
     ):
         adjustment += 3.5
 
-    if unit == "hour" and ("general" in work_name or "building control fee" in work_name):
+    if unit == "hour" and (
+        "general" in work_name or "building control fee" in work_name
+    ):
         adjustment -= 1.5
 
-    if unit == "hour" and "preliminaries" in group_name and not any(
-        keyword in lowered_prompt for keyword in ("prelim", "site", "management", "delivery", "protection", "toilet", "welfare")
+    if (
+        unit == "hour"
+        and "preliminaries" in group_name
+        and not any(
+            keyword in lowered_prompt
+            for keyword in (
+                "prelim",
+                "site",
+                "management",
+                "delivery",
+                "protection",
+                "toilet",
+                "welfare",
+            )
+        )
     ):
         adjustment -= 2.0
 
-    if "internal wall" in lowered_prompt or "stud partition" in lowered_prompt or "partition wall" in lowered_prompt:
-        if "stud partition" in work_name or ("partition" in work_name and "remove" in work_name):
+    if (
+        "internal wall" in lowered_prompt
+        or "stud partition" in lowered_prompt
+        or "partition wall" in lowered_prompt
+    ):
+        if "stud partition" in work_name or (
+            "partition" in work_name and "remove" in work_name
+        ):
             adjustment += 16.0
-        if "kitchen wall and  floor units" in work_name or "kitchen wall and floor units" in work_name:
+        if (
+            "kitchen wall and  floor units" in work_name
+            or "kitchen wall and floor units" in work_name
+        ):
             adjustment -= 7.0
 
     if "boiler" in lowered_prompt and any(
-        keyword in lowered_prompt for keyword in ("client supply", "client supplied", "supply only", "install")
+        keyword in lowered_prompt
+        for keyword in ("client supply", "client supplied", "supply only", "install")
     ):
         if "install boiler" in work_name:
             adjustment += 8.0
         if work_name.startswith("remove boiler"):
             adjustment -= 6.0
 
-    if any(keyword in lowered_prompt for keyword in ("wall tiling", "floor tiling", "tile", "tiling")):
-        if any(keyword in work_name for keyword in ("wall tile", "floor tile", "tiling", "tile")):
+    if any(
+        keyword in lowered_prompt
+        for keyword in ("wall tiling", "floor tiling", "tile", "tiling")
+    ):
+        if any(
+            keyword in work_name
+            for keyword in ("wall tile", "floor tile", "tiling", "tile")
+        ):
             adjustment += 4.0
 
-    if any(keyword in lowered_prompt for keyword in ("electric underfloor heating", "electric ufh", "ufh")):
-        if "electric underfloor heating" in work_name or ("underfloor heating" in work_name and "electric" in group_name):
+    if any(
+        keyword in lowered_prompt
+        for keyword in ("electric underfloor heating", "electric ufh", "ufh")
+    ):
+        if "electric underfloor heating" in work_name or (
+            "underfloor heating" in work_name and "electric" in group_name
+        ):
             adjustment += 4.5
-        if "remove underfloor heating" in work_name or ("remove" in work_name and "underfloor heating" in work_name):
+        if "remove underfloor heating" in work_name or (
+            "remove" in work_name and "underfloor heating" in work_name
+        ):
             adjustment -= 5.0
 
-    if any(keyword in lowered_prompt for keyword in ("remove", "strip out", "strip-out", "demolition")) and (
-        work_name.startswith("install ") or " install " in work_name or "1st fix" in work_name or "first fix" in work_name or "second fix" in work_name
+    if any(
+        keyword in lowered_prompt
+        for keyword in ("remove", "strip out", "strip-out", "demolition")
+    ) and (
+        work_name.startswith("install ")
+        or " install " in work_name
+        or "1st fix" in work_name
+        or "first fix" in work_name
+        or "second fix" in work_name
     ):
         adjustment -= 3.5
 
     if unit == "hour":
         if "radiator" in lowered_prompt and "radiator" not in work_name:
             adjustment -= 3.5
-        if any(keyword in lowered_prompt for keyword in ("skirting", "architrave")) and not any(
-            keyword in work_name for keyword in ("skirting", "architrave")
-        ):
+        if any(
+            keyword in lowered_prompt for keyword in ("skirting", "architrave")
+        ) and not any(keyword in work_name for keyword in ("skirting", "architrave")):
             adjustment -= 3.5
-        if any(keyword in lowered_prompt for keyword in ("insulation", "rockwool", "pir")) and not any(
+        if any(
+            keyword in lowered_prompt for keyword in ("insulation", "rockwool", "pir")
+        ) and not any(
             keyword in work_name for keyword in ("insulation", "rockwool", "pir")
         ):
             adjustment -= 3.5
-        if any(keyword in lowered_prompt for keyword in ("boiler", "underfloor heating", "ufh")) and not any(
-            keyword in work_name for keyword in ("boiler", "underfloor heating", "ufh", "radiator")
+        if any(
+            keyword in lowered_prompt
+            for keyword in ("boiler", "underfloor heating", "ufh")
+        ) and not any(
+            keyword in work_name
+            for keyword in ("boiler", "underfloor heating", "ufh", "radiator")
         ):
             adjustment -= 4.0
 
@@ -287,7 +499,10 @@ def _build_active_group_limit_overrides(
         return overrides
 
     for _, row in scored_rows:
-        if any(_row_matches_section_hints(row, section_key, hints) for section_key, hints in active_sections):
+        if any(
+            _row_matches_section_hints(row, section_key, hints)
+            for section_key, hints in active_sections
+        ):
             overrides[_group_key(row)] = max(default_limit, active_limit)
     return overrides
 
@@ -352,7 +567,11 @@ def _build_group_balanced_selection(
     while len(selected) < limit:
         added_in_round = False
         for key in group_order:
-            group_limit = per_group_limit_overrides.get(key, per_group_limit) if per_group_limit_overrides else per_group_limit
+            group_limit = (
+                per_group_limit_overrides.get(key, per_group_limit)
+                if per_group_limit_overrides
+                else per_group_limit
+            )
             if group_counts[key] >= group_limit:
                 continue
 
@@ -400,7 +619,9 @@ def shortlist_candidates(
     prompt_bigrams = _build_bigrams(prompt_terms)
     segments = split_prompt_segments(prompt)
     best_scores: dict[str, tuple[float, CandidateRow]] = {}
-    document_frequency, average_document_length = _build_document_frequencies(candidate_rows)
+    document_frequency, average_document_length = _build_document_frequencies(
+        candidate_rows
+    )
     document_count = len(candidate_rows)
     active_sections = _extract_active_sections(prompt)
     active_section_keys = {section_key for section_key, _ in active_sections}
@@ -447,7 +668,9 @@ def shortlist_candidates(
             if score > 0:
                 scored_for_segment.append((score, row))
 
-        for score, row in sorted(scored_for_segment, key=lambda item: item[0], reverse=True)[:per_segment_limit]:
+        for score, row in sorted(
+            scored_for_segment, key=lambda item: item[0], reverse=True
+        )[:per_segment_limit]:
             current = best_scores.get(row.INSIDEQUOTESGUID)
             if current is None or score > current[0]:
                 best_scores[row.INSIDEQUOTESGUID] = (score, row)

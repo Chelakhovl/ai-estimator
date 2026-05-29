@@ -8,12 +8,10 @@ from app.schemas import (
     PromptNormalizationRequest,
     PromptNormalizationResponse,
     PromptBlocker,
-    PreviewAssumption,
 )
 from app.services.scope_extractor import extract_scope
 from app.services.scope_parsing import (
     ROOM_LEVEL_ORDER,
-    ROOM_LEVELS,
     SECTION_HEADING_ALIASES,
     SECTION_TITLES,
     clean_line,
@@ -65,7 +63,9 @@ _START_HEADING_ALIASES = {
     for key, value in _LOOSE_HEADING_ALIASES.items()
     if key not in {"details", "walls"}
 }
-_START_HEADING_PATTERNS = sorted(_START_HEADING_ALIASES.items(), key=lambda item: len(item[0]), reverse=True)
+_START_HEADING_PATTERNS = sorted(
+    _START_HEADING_ALIASES.items(), key=lambda item: len(item[0]), reverse=True
+)
 _KEYWORD_SECTION_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("preliminaries", ("wait", "load")),
     ("commercial_settings", ("materials", "markup")),
@@ -168,7 +168,13 @@ _SUPPLY_MARKERS = (
     "supply and fit",
     "supply & fit",
 )
-_STEEL_AMBIGUITY_MARKERS = ("multiple", "sizes provided", "counts given", "total provided", "provided")
+_STEEL_AMBIGUITY_MARKERS = (
+    "multiple",
+    "sizes provided",
+    "counts given",
+    "total provided",
+    "provided",
+)
 _WASTE_ACCESS_AMBIGUITY_MARKERS = (
     "no skip access",
     "restricted access",
@@ -189,7 +195,14 @@ _WASTE_ACCESS_EXPLICIT_MARKERS = (
     "grab lorry",
     "market allowance",
 )
-_CLARIFICATION_PLACEHOLDER_VALUES = {"tbc", "unknown", "unsure", "n/a", "na", "same as prompt"}
+_CLARIFICATION_PLACEHOLDER_VALUES = {
+    "tbc",
+    "unknown",
+    "unsure",
+    "n/a",
+    "na",
+    "same as prompt",
+}
 _ROOM_CAPTURE_CONTEXTS = {None, "property", "full_scope", "floor_areas_rooms"}
 _NON_ROOM_DIMENSION_TOKENS = ("dormer",)
 
@@ -208,7 +221,9 @@ def _looks_like_heading(line: str) -> bool:
         return False
     if stripped.isupper():
         return True
-    return bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9 &/()+-]{2,}", stripped)) and line.strip().endswith(":")
+    return bool(
+        re.fullmatch(r"[A-Za-z][A-Za-z0-9 &/()+-]{2,}", stripped)
+    ) and line.strip().endswith(":")
 
 
 def _is_room_level(line: str) -> bool:
@@ -223,7 +238,9 @@ def _infer_default_room_level(prompt: str) -> str | None:
     return infer_default_room_level(prompt)
 
 
-def _split_inline_scope_clauses(line: str, current_heading_hint: str | None) -> list[str]:
+def _split_inline_scope_clauses(
+    line: str, current_heading_hint: str | None
+) -> list[str]:
     lowered = line.lower()
     if current_heading_hint not in {None, "full_scope"}:
         return [line]
@@ -255,7 +272,9 @@ def _append_room_clause_if_possible(
     if any(token in room_name.lower() for token in _NON_ROOM_DIMENSION_TOKENS):
         return False
 
-    normalized_room_line = f"{room_name}: {room_match.group('width')} x {room_match.group('length')}"
+    normalized_room_line = (
+        f"{room_name}: {room_match.group('width')} x {room_match.group('length')}"
+    )
     level = current_room_level or default_room_level
     if level:
         rooms_by_level.setdefault(level, []).append(normalized_room_line)
@@ -270,7 +289,11 @@ def _contains_keyword_phrase(text: str, keyword: str) -> bool:
         return False
     if re.search(r"[^a-z0-9\s]", normalized_keyword):
         return normalized_keyword in text
-    pattern = r"\b" + r"\W+".join(re.escape(part) for part in normalized_keyword.split()) + r"\b"
+    pattern = (
+        r"\b"
+        + r"\W+".join(re.escape(part) for part in normalized_keyword.split())
+        + r"\b"
+    )
     return bool(re.search(pattern, text, re.IGNORECASE))
 
 
@@ -279,9 +302,13 @@ def _heading_key_pattern(heading_key: str) -> str:
     return r"[\W_]*".join(parts)
 
 
-def _extract_heading_at_start(line: str, current_heading_hint: str | None) -> tuple[str, str] | None:
+def _extract_heading_at_start(
+    line: str, current_heading_hint: str | None
+) -> tuple[str, str] | None:
     stripped = line.strip()
-    if not stripped or re.match(r"^(type|location|property)\s*:", stripped, re.IGNORECASE):
+    if not stripped or re.match(
+        r"^(type|location|property)\s*:", stripped, re.IGNORECASE
+    ):
         return None
     for heading_alias, heading_key in _START_HEADING_PATTERNS:
         pattern = re.compile(
@@ -301,9 +328,16 @@ def _extract_heading_at_start(line: str, current_heading_hint: str | None) -> tu
             heading_lead = stripped.split(":", 1)[0].strip()
             looks_like_context_section_heading = bool(
                 re.match(r"^[A-Z][A-Z0-9 &/()'-]*$", heading_lead)
-                or re.match(rf"^[^A-Za-z0-9]*(?:{_heading_key_pattern(heading_alias)})\s*\(", stripped, re.IGNORECASE)
+                or re.match(
+                    rf"^[^A-Za-z0-9]*(?:{_heading_key_pattern(heading_alias)})\s*\(",
+                    stripped,
+                    re.IGNORECASE,
+                )
             )
-            if current_heading_hint in _NORMALIZED_SECTION_ORDER and current_heading_hint not in {"full_scope", "floor_areas_rooms"}:
+            if (
+                current_heading_hint in _NORMALIZED_SECTION_ORDER
+                and current_heading_hint not in {"full_scope", "floor_areas_rooms"}
+            ):
                 if not looks_like_context_section_heading:
                     continue
         remainder = (match.group("rest") or "").strip()
@@ -352,7 +386,10 @@ def _route_line_to_section(line: str, current_heading_hint: str | None) -> str |
         for section_key, keywords in _KEYWORD_SECTION_RULES:
             if all(_contains_keyword_phrase(lowered, keyword) for keyword in keywords):
                 return section_key
-        if any(_contains_keyword_phrase(lowered, keyword) for keyword in ("kitchen", "unit", "units", "cabinet", "worktop")):
+        if any(
+            _contains_keyword_phrase(lowered, keyword)
+            for keyword in ("kitchen", "unit", "units", "cabinet", "worktop")
+        ):
             return "joinery"
         return "full_scope"
     if current_heading_hint == "full_scope" and ":" not in line:
@@ -362,7 +399,10 @@ def _route_line_to_section(line: str, current_heading_hint: str | None) -> str |
     for section_key, keywords in _KEYWORD_SECTION_RULES:
         if all(_contains_keyword_phrase(lowered, keyword) for keyword in keywords):
             return section_key
-    if re.search(r"\b(refurb|refurbishment|renovation|conversion|extension|fit out|fit-out)\b", lowered):
+    if re.search(
+        r"\b(refurb|refurbishment|renovation|conversion|extension|fit out|fit-out)\b",
+        lowered,
+    ):
         return "full_scope"
     return None
 
@@ -388,7 +428,11 @@ def _merge_prompt_with_answers(prompt: str, answers: list) -> str:
 
 
 def _has_answered_clarification(prompt: str, question_id: str) -> bool:
-    match = re.search(rf"^\s*{re.escape(question_id)}\s*:\s*(.+)$", prompt, re.IGNORECASE | re.MULTILINE)
+    match = re.search(
+        rf"^\s*{re.escape(question_id)}\s*:\s*(.+)$",
+        prompt,
+        re.IGNORECASE | re.MULTILINE,
+    )
     if not match:
         return False
     answer = match.group(1).strip()
@@ -405,7 +449,9 @@ def _room_line_match(line: str) -> re.Match[str] | None:
     )
 
 
-def _collect_structured_sections(prompt: str) -> tuple[dict[str, list[str]], dict[str, list[str]], list[str], dict[str, str]]:
+def _collect_structured_sections(
+    prompt: str,
+) -> tuple[dict[str, list[str]], dict[str, list[str]], list[str], dict[str, str]]:
     lines = prepare_prompt_lines(prompt)
     sections = {key: [] for key in _NORMALIZED_SECTION_ORDER}
     rooms_by_level = {level: [] for level in ROOM_LEVEL_ORDER}
@@ -500,9 +546,13 @@ def _collect_structured_sections(prompt: str) -> tuple[dict[str, list[str]], dic
                     if room_schedule_active:
                         current_room_level = default_room_level
                     continue
-                routed_section = _route_line_to_section(retained_line, current_heading_hint)
+                routed_section = _route_line_to_section(
+                    retained_line, current_heading_hint
+                )
                 if routed_section == "full_scope":
-                    sections["full_scope"].extend(split_project_scope_line(retained_line))
+                    sections["full_scope"].extend(
+                        split_project_scope_line(retained_line)
+                    )
                 elif routed_section == "floor_areas_rooms":
                     room_match = _room_line_match(retained_line)
                     if room_match:
@@ -590,7 +640,9 @@ def _build_normalized_prompt_markdown(
         property_block.append(f"Type: {property_values['Type']}")
     if property_values.get("Location"):
         property_block.append(f"Location: {property_values['Location']}")
-    property_block.extend(line for line in sections["property"] if line not in property_block)
+    property_block.extend(
+        line for line in sections["property"] if line not in property_block
+    )
     if property_block:
         blocks.append("PROPERTY:\n" + "\n".join(property_block))
 
@@ -606,9 +658,7 @@ def _build_normalized_prompt_markdown(
         room_block_lines.append(level)
         room_block_lines.extend(room_lines)
     room_block_lines.extend(
-        line
-        for line in sections["floor_areas_rooms"]
-        if line not in room_block_lines
+        line for line in sections["floor_areas_rooms"] if line not in room_block_lines
     )
     if room_block_lines:
         blocks.append("FLOOR AREAS & ROOMS:\n" + "\n".join(room_block_lines))
@@ -619,15 +669,24 @@ def _build_normalized_prompt_markdown(
         lines = sections.get(section_key) or []
         if not lines:
             continue
-        title = SECTION_TITLES.get(section_key) or _NORMALIZE_ONLY_SECTION_TITLES.get(section_key) or section_key.replace("_", " ").title()
+        title = (
+            SECTION_TITLES.get(section_key)
+            or _NORMALIZE_ONLY_SECTION_TITLES.get(section_key)
+            or section_key.replace("_", " ").title()
+        )
         blocks.append(f"{title.upper()}:\n" + "\n".join(lines))
 
     return "\n\n".join(blocks).strip()
 
 
-def _bathroom_fixture_question(prompt: str, normalized_scope) -> ClarificationQuestion | None:
+def _bathroom_fixture_question(
+    prompt: str, normalized_scope
+) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    if not any(keyword in normalized for keyword in ("bathroom", "ensuite", "shower room", "wc", "sanitary")):
+    if not any(
+        keyword in normalized
+        for keyword in ("bathroom", "ensuite", "shower room", "wc", "sanitary")
+    ):
         return None
     if _has_answered_clarification(prompt, "bathroom_fixture_scope"):
         return None
@@ -682,7 +741,10 @@ def _room_level_question(prompt: str, normalized_scope) -> ClarificationQuestion
 
 def _steel_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    if not any(keyword in normalized for keyword in ("steel", "beam", "ukb", "uc", "column", "post")):
+    if not any(
+        keyword in normalized
+        for keyword in ("steel", "beam", "ukb", "uc", "column", "post")
+    ):
         return None
     if _has_answered_clarification(prompt, "steel_scope_detail"):
         return None
@@ -699,16 +761,33 @@ def _steel_question(prompt: str) -> ClarificationQuestion | None:
 
 def _supply_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    if not any(keyword in normalized for keyword in ("sanitaryware", "appliance", "appliances", "kitchen", "kitchen units")):
+    if not any(
+        keyword in normalized
+        for keyword in (
+            "sanitaryware",
+            "appliance",
+            "appliances",
+            "kitchen",
+            "kitchen units",
+        )
+    ):
         return None
     if _has_answered_clarification(prompt, "supply_split"):
         return None
-    if any(marker in normalized for marker in _SUPPLY_MARKERS) or re.search(r"\b(supply|supplied|supply only)\b", normalized):
+    if any(marker in normalized for marker in _SUPPLY_MARKERS) or re.search(
+        r"\b(supply|supplied|supply only)\b", normalized
+    ):
         return None
     if not (
         "sanitaryware" in normalized
-        or re.search(r"(kitchen|appliance|kitchen units?).{0,40}(install|fit|fitting|supply|supplied|units|refurb)", normalized)
-        or re.search(r"(install|fit|fitting|supply|supplied|units|refurb).{0,40}(kitchen|appliance|kitchen units?)", normalized)
+        or re.search(
+            r"(kitchen|appliance|kitchen units?).{0,40}(install|fit|fitting|supply|supplied|units|refurb)",
+            normalized,
+        )
+        or re.search(
+            r"(install|fit|fitting|supply|supplied|units|refurb).{0,40}(kitchen|appliance|kitchen units?)",
+            normalized,
+        )
     ):
         return None
     return ClarificationQuestion(
@@ -718,8 +797,12 @@ def _supply_question(prompt: str) -> ClarificationQuestion | None:
         answer_type="single_select",
         options=[
             ClarificationQuestionOption(value="client_supply", label="Client supplied"),
-            ClarificationQuestionOption(value="contractor_supply", label="Contractor supplied"),
-            ClarificationQuestionOption(value="mixed_or_unsure", label="Mixed / unsure"),
+            ClarificationQuestionOption(
+                value="contractor_supply", label="Contractor supplied"
+            ),
+            ClarificationQuestionOption(
+                value="mixed_or_unsure", label="Mixed / unsure"
+            ),
         ],
         applies_to_section="Commercial Settings",
     )
@@ -748,7 +831,16 @@ def _tiling_question(prompt: str, normalized_scope) -> ClarificationQuestion | N
 
 def _scaffold_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    if not any(keyword in normalized for keyword in ("scaffold", "scaffolding", "temporary roof", "rubbish chute", "hoist")):
+    if not any(
+        keyword in normalized
+        for keyword in (
+            "scaffold",
+            "scaffolding",
+            "temporary roof",
+            "rubbish chute",
+            "hoist",
+        )
+    ):
         return None
     if _has_answered_clarification(prompt, "scaffold_allowance_scope"):
         return None
@@ -763,7 +855,15 @@ def _scaffold_question(prompt: str) -> ClarificationQuestion | None:
 
 def _permit_cdm_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    keywords = ("cdm", "principal contractor", "skip permit", "road permit", "parking suspension", "parking permit", "highway permit")
+    keywords = (
+        "cdm",
+        "principal contractor",
+        "skip permit",
+        "road permit",
+        "parking suspension",
+        "parking permit",
+        "highway permit",
+    )
     if not any(keyword in normalized for keyword in keywords):
         return None
     if _has_answered_clarification(prompt, "permit_cdm_scope"):
@@ -779,7 +879,14 @@ def _permit_cdm_question(prompt: str) -> ClarificationQuestion | None:
 
 def _allowance_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    keywords = ("client allowance", "architect allowance", "provisional sum", "pc sum", "prime cost", "supply allowance")
+    keywords = (
+        "client allowance",
+        "architect allowance",
+        "provisional sum",
+        "pc sum",
+        "prime cost",
+        "supply allowance",
+    )
     if not any(keyword in normalized for keyword in keywords):
         return None
     if _has_answered_clarification(prompt, "allowance_scope_detail"):
@@ -793,18 +900,33 @@ def _allowance_question(prompt: str) -> ClarificationQuestion | None:
     )
 
 
-def _ceiling_height_question(prompt: str, normalized_scope) -> ClarificationQuestion | None:
+def _ceiling_height_question(
+    prompt: str, normalized_scope
+) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    has_wall_work = any(kw in normalized for kw in (
-        "plaster", "skim", "emulsion", "paint wall", "paint ceil", "decor", "tiling", "tile",
-    ))
+    has_wall_work = any(
+        kw in normalized
+        for kw in (
+            "plaster",
+            "skim",
+            "emulsion",
+            "paint wall",
+            "paint ceil",
+            "decor",
+            "tiling",
+            "tile",
+        )
+    )
     has_rooms = bool(normalized_scope.rooms)
     if not has_wall_work or not has_rooms:
         return None
-    already_given = bool(re.search(
-        r"ceiling\s*height|floor.to.ceiling|storey\s*height|\d+\.?\d*\s*m\s+(?:ceiling|height)",
-        normalized, re.IGNORECASE,
-    ))
+    already_given = bool(
+        re.search(
+            r"ceiling\s*height|floor.to.ceiling|storey\s*height|\d+\.?\d*\s*m\s+(?:ceiling|height)",
+            normalized,
+            re.IGNORECASE,
+        )
+    )
     if already_given:
         return None
     if _has_answered_clarification(prompt, "ceiling_height"):
@@ -815,10 +937,18 @@ def _ceiling_height_question(prompt: str, normalized_scope) -> ClarificationQues
         reason="Wall area calculations for plastering, painting, and tiling depend on ceiling height. Without it the system assumes 2.4m, which can under-price a Victorian terrace by 15–25%.",
         answer_type="single_select",
         options=[
-            ClarificationQuestionOption(value="2.4m", label="2.4m — standard modern build"),
-            ClarificationQuestionOption(value="2.55m", label="2.55m — mid-century or newer terrace"),
-            ClarificationQuestionOption(value="2.75m", label="2.75m — older / pre-war property"),
-            ClarificationQuestionOption(value="3.0m", label="3.0m — Victorian / period high ceilings"),
+            ClarificationQuestionOption(
+                value="2.4m", label="2.4m — standard modern build"
+            ),
+            ClarificationQuestionOption(
+                value="2.55m", label="2.55m — mid-century or newer terrace"
+            ),
+            ClarificationQuestionOption(
+                value="2.75m", label="2.75m — older / pre-war property"
+            ),
+            ClarificationQuestionOption(
+                value="3.0m", label="3.0m — Victorian / period high ceilings"
+            ),
             ClarificationQuestionOption(value="varies", label="Varies floor by floor"),
         ],
         applies_to_section="Plastering / Decorating",
@@ -828,7 +958,9 @@ def _ceiling_height_question(prompt: str, normalized_scope) -> ClarificationQues
 
 def _door_count_question(prompt: str) -> ClarificationQuestion | None:
     normalized = prompt.lower()
-    has_woodwork = any(kw in normalized for kw in ("gloss", "woodwork", "skirting", "architrave"))
+    has_woodwork = any(
+        kw in normalized for kw in ("gloss", "woodwork", "skirting", "architrave")
+    )
     if not has_woodwork:
         return None
     has_explicit_count = bool(
@@ -863,10 +995,16 @@ def _waste_access_question(prompt: str) -> ClarificationQuestion | None:
         reason="Waste access constraints were detected, but the prompt does not say whether the job should use skip access, wait & load, rubble bags, or a market allowance path.",
         answer_type="single_select",
         options=[
-            ClarificationQuestionOption(value="skip_on_driveway", label="Skip / normal skip access"),
+            ClarificationQuestionOption(
+                value="skip_on_driveway", label="Skip / normal skip access"
+            ),
             ClarificationQuestionOption(value="wait_load", label="Wait & load"),
-            ClarificationQuestionOption(value="rubble_bags", label="Rubble bags / bag-out"),
-            ClarificationQuestionOption(value="market_allowance", label="Carry as market allowance"),
+            ClarificationQuestionOption(
+                value="rubble_bags", label="Rubble bags / bag-out"
+            ),
+            ClarificationQuestionOption(
+                value="market_allowance", label="Carry as market allowance"
+            ),
         ],
         applies_to_section="Preliminaries / Waste",
     )
@@ -925,8 +1063,12 @@ def _build_warnings(normalized_scope) -> list[str]:
     return warnings[:6]
 
 
-def _normalization_confidence(normalized_scope, questions: list[ClarificationQuestion]) -> float:
-    recognized_sections = sum(1 for section in normalized_scope.sections if section.lines)
+def _normalization_confidence(
+    normalized_scope, questions: list[ClarificationQuestion]
+) -> float:
+    recognized_sections = sum(
+        1 for section in normalized_scope.sections if section.lines
+    )
     confidence = 0.45
     if normalized_scope.property_context.property_type:
         confidence += 0.08
@@ -941,10 +1083,18 @@ def _normalization_confidence(normalized_scope, questions: list[ClarificationQue
     return max(0.15, min(0.98, round(confidence, 2)))
 
 
-def normalize_intake_prompt(request: PromptNormalizationRequest) -> PromptNormalizationResponse:
-    prompt_with_answers = _merge_prompt_with_answers(request.prompt, request.clarification_answers)
-    sections, rooms_by_level, _lines, property_values = _collect_structured_sections(prompt_with_answers)
-    normalized_prompt_markdown = _build_normalized_prompt_markdown(sections, rooms_by_level, property_values)
+def normalize_intake_prompt(
+    request: PromptNormalizationRequest,
+) -> PromptNormalizationResponse:
+    prompt_with_answers = _merge_prompt_with_answers(
+        request.prompt, request.clarification_answers
+    )
+    sections, rooms_by_level, _lines, property_values = _collect_structured_sections(
+        prompt_with_answers
+    )
+    normalized_prompt_markdown = _build_normalized_prompt_markdown(
+        sections, rooms_by_level, property_values
+    )
 
     if not normalized_prompt_markdown:
         return PromptNormalizationResponse(
@@ -955,7 +1105,9 @@ def normalize_intake_prompt(request: PromptNormalizationRequest) -> PromptNormal
             questions=[],
             blockers=[],
             warnings=[],
-            missing_items=["The prompt could not be organized into a usable property, room, or trade scope structure."],
+            missing_items=[
+                "The prompt could not be organized into a usable property, room, or trade scope structure."
+            ],
             error_text="We could not safely normalize this prompt into a structured scope.",
         )
 
@@ -970,7 +1122,9 @@ def normalize_intake_prompt(request: PromptNormalizationRequest) -> PromptNormal
     if not normalized_scope.sections and not normalized_scope.rooms:
         status = "unsupported"
         confidence = min(confidence, 0.22)
-        missing_items = ["The prompt did not produce any rooms or actionable trade sections after normalization."]
+        missing_items = [
+            "The prompt did not produce any rooms or actionable trade sections after normalization."
+        ]
 
     return PromptNormalizationResponse(
         status=status,
@@ -981,5 +1135,7 @@ def normalize_intake_prompt(request: PromptNormalizationRequest) -> PromptNormal
         blockers=blockers,
         warnings=warnings,
         missing_items=missing_items,
-        error_text="" if status != "unsupported" else "We could not safely normalize this prompt into a reliable structured scope.",
+        error_text=""
+        if status != "unsupported"
+        else "We could not safely normalize this prompt into a reliable structured scope.",
     )

@@ -145,11 +145,18 @@ def test_extract_scope_parses_large_house_prompt() -> None:
     warning_text = " ".join(assumption.text for assumption in response.assumptions)
     assert "Door supply allowance was calculated from counted door sets" in warning_text
     derived_finish_warning = next(
-        assumption for assumption in response.assumptions if assumption.kind == "derived_finish_takeoff"
+        assumption
+        for assumption in response.assumptions
+        if assumption.kind == "derived_finish_takeoff"
     )
-    assert "Derived wall, ceiling, skirting, boarding, insulation, and loft/roof takeoff uses" in derived_finish_warning.text
+    assert (
+        "Derived wall, ceiling, skirting, boarding, insulation, and loft/roof takeoff uses"
+        in derived_finish_warning.text
+    )
     assert "AI-side room-height and build-up heuristics" in derived_finish_warning.text
-    assert "Treat these values as a strong draft baseline" in derived_finish_warning.text
+    assert (
+        "Treat these values as a strong draft baseline" in derived_finish_warning.text
+    )
 
 
 def test_extract_scope_derives_joinery_detail_counts() -> None:
@@ -192,7 +199,9 @@ def test_extract_scope_recovers_inline_headings_and_room_schedule() -> None:
     assert len(response.rooms) == 2
     assert response.rooms[0].name == "Kitchen"
     assert response.rooms[1].name == "Utility"
-    demolition_section = next(section for section in response.sections if section.key == "demolition")
+    demolition_section = next(
+        section for section in response.sections if section.key == "demolition"
+    )
     assert any("Strip out kitchen" in line for line in demolition_section.lines)
 
 
@@ -485,7 +494,11 @@ Client supply appliances
     assert response.takeoff_summary.total_appliance_connection_count == 5.0
     assert response.takeoff_summary.client_supply_sanitaryware is True
     assert response.takeoff_summary.client_supply_appliances is True
-    assert any("client supplied" in assumption.text.lower() for assumption in response.assumptions if assumption.text)
+    assert any(
+        "client supplied" in assumption.text.lower()
+        for assumption in response.assumptions
+        if assumption.text
+    )
 
 
 def test_extract_scope_applies_explicit_electrical_detail_overrides() -> None:
@@ -537,7 +550,9 @@ def test_extract_scope_endpoint_requires_api_key(monkeypatch) -> None:
     reload(app_security)
 
     client = TestClient(app)
-    response = client.post("/v1/estimate/extract-scope", json={"prompt": STRUCTURED_PROMPT})
+    response = client.post(
+        "/v1/estimate/extract-scope", json={"prompt": STRUCTURED_PROMPT}
+    )
 
     assert response.status_code == 401
 
@@ -582,12 +597,18 @@ Bedroom 1: 3 x 4
     response = extract_scope(prompt)
 
     assert response.error_text == ""
-    assert [room.level for room in response.rooms] == ["Basement", "Second Floor", "Second Floor"]
+    assert [room.level for room in response.rooms] == [
+        "Basement",
+        "Second Floor",
+        "Second Floor",
+    ]
     assert response.takeoff_summary.basement_area_m2 == 6.0
     assert response.takeoff_summary.second_floor_area_m2 == 16.0
     assert response.takeoff_summary.total_internal_floor_area_m2 == 22.0
 
-    shower_room = next(room for room in response.room_takeoff if room.name == "Shower Room")
+    shower_room = next(
+        room for room in response.room_takeoff if room.name == "Shower Room"
+    )
     assert shower_room.room_type == "shower_room"
     assert shower_room.estimated_shower_count == 1.0
     assert shower_room.estimated_bath_count == 0.0

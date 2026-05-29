@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def _payload(message: str = "Client uploaded the kitchen drawings and room schedule.") -> dict:
+def _payload(
+    message: str = "Client uploaded the kitchen drawings and room schedule.",
+) -> dict:
     return {
         "session_id": 1,
         "quote_id": 12,
@@ -49,7 +51,10 @@ def _payload(message: str = "Client uploaded the kitchen drawings and room sched
                         "name": "Room Schedule",
                         "row_count_excerpt": 2,
                         "recognized_schedule": True,
-                        "rows": [["Room", "Length", "Width", "Area"], ["Kitchen", "3.5", "5.8", "20.3"]],
+                        "rows": [
+                            ["Room", "Length", "Width", "Area"],
+                            ["Kitchen", "3.5", "5.8", "20.3"],
+                        ],
                         "excerpt": "Room | Length | Width | Area\nKitchen | 3.5 | 5.8 | 20.3",
                     }
                 ],
@@ -84,7 +89,9 @@ def test_project_intake_chat_requires_valid_api_key(monkeypatch) -> None:
     assert response.json()["detail"] == "Invalid or missing API key."
 
 
-def test_project_intake_chat_returns_structured_brief_in_fallback_mode(monkeypatch) -> None:
+def test_project_intake_chat_returns_structured_brief_in_fallback_mode(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("SERVICE_API_KEY", "test-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("OPENAI_MODEL", "")
@@ -101,7 +108,9 @@ def test_project_intake_chat_returns_structured_brief_in_fallback_mode(monkeypat
     reload(intake_service)
 
     client = TestClient(app)
-    response = client.post("/v1/project-intake/chat", json=_payload(), headers={"x-api-key": "test-secret"})
+    response = client.post(
+        "/v1/project-intake/chat", json=_payload(), headers={"x-api-key": "test-secret"}
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -139,4 +148,3 @@ def test_project_intake_finalize_returns_structured_scope_markdown(monkeypatch) 
     assert body["handoff_readiness"] is True
     assert "PROPERTY:" in body["structured_scope_markdown"]
     assert "FLOOR AREAS & ROOMS:" in body["structured_scope_markdown"]
-

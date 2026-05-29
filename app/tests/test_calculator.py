@@ -1,5 +1,7 @@
-from app.services.calculator import calculate_client_cost_per_unit, calculate_client_total_cost
-
+from app.services.calculator import (
+    calculate_client_cost_per_unit,
+    calculate_client_total_cost,
+)
 
 
 def test_calculate_client_cost_per_unit() -> None:
@@ -15,6 +17,7 @@ def test_calculate_client_cost_per_unit() -> None:
     assert result == 20.4
 
 
-
 def test_calculate_client_total_cost() -> None:
-    assert calculate_client_total_cost(quantity=120, client_cost_per_unit=20.4) == 2448.0
+    assert (
+        calculate_client_total_cost(quantity=120, client_cost_per_unit=20.4) == 2448.0
+    )

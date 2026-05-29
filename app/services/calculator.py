@@ -26,7 +26,6 @@ def calculate_client_cost_per_unit(
     )
 
 
-
 def calculate_client_total_cost(quantity: float, client_cost_per_unit: float) -> float:
     if quantity <= 0:
         raise ValueError("quantity must be greater than zero")

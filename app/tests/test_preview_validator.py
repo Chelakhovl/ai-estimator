@@ -2,7 +2,9 @@ from app.schemas import CandidateRow, LLMPreviewMatchedRow
 from app.services.preview_validator import validate_and_materialize_match
 
 
-def test_validator_preserves_candidate_defaults_when_zero_not_explicitly_allowed() -> None:
+def test_validator_preserves_candidate_defaults_when_zero_not_explicitly_allowed() -> (
+    None
+):
     candidate = CandidateRow(
         INSIDEQUOTESGUID="inside-1",
         WORKGUID="work-1",

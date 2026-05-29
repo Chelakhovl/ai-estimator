@@ -171,7 +171,9 @@ def synthesize_document_to_markdown(*, page_bundles: list[dict]) -> dict:
         latency_ms = int((perf_counter() - started_at) * 1000)
         logger.info(
             "Document synthesis completed — model=%s pages=%d latency=%dms",
-            model, len(page_bundles), latency_ms,
+            model,
+            len(page_bundles),
+            latency_ms,
         )
 
         markdown = (response.choices[0].message.content or "").strip()

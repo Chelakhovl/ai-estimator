@@ -15,7 +15,9 @@ from app.schemas import (
     ProjectBriefV1,
 )
 from app.services.project_intake_llm_client import IntakeLLMClient
-from app.services.project_intake_renderer import render_project_brief_to_structured_scope
+from app.services.project_intake_renderer import (
+    render_project_brief_to_structured_scope,
+)
 from app.services.scope_extractor import extract_scope
 
 
@@ -42,45 +44,91 @@ def _empty_project_brief() -> ProjectBriefV1:
     )
 
 
-def _append_fact(section: ProjectBriefSection, text: str, *, source: str = "ai", confidence: str = "medium", uncertain: bool = False) -> None:
+def _append_fact(
+    section: ProjectBriefSection,
+    text: str,
+    *,
+    source: str = "ai",
+    confidence: str = "medium",
+    uncertain: bool = False,
+) -> None:
     normalized = " ".join((text or "").split()).strip()
     if not normalized:
         return
     if any(existing.text == normalized for existing in section.facts):
         return
-    section.facts.append(ProjectBriefFact(text=normalized, source=source, confidence=confidence, uncertain=uncertain))
+    section.facts.append(
+        ProjectBriefFact(
+            text=normalized, source=source, confidence=confidence, uncertain=uncertain
+        )
+    )
 
 
 def _extract_assets_text(assets: list[IntakeAssetExcerpt]) -> str:
-    return "\n\n".join(asset.document_excerpt for asset in assets if asset.document_excerpt.strip())
+    return "\n\n".join(
+        asset.document_excerpt for asset in assets if asset.document_excerpt.strip()
+    )
 
 
-def _find_source_lines(assets: list[IntakeAssetExcerpt], turns: list, latest_message: str) -> list[str]:
+def _find_source_lines(
+    assets: list[IntakeAssetExcerpt], turns: list, latest_message: str
+) -> list[str]:
     lines: list[str] = []
     for asset in assets:
         if asset.document_excerpt.strip():
-            lines.extend(part.strip() for part in asset.document_excerpt.splitlines() if part.strip())
+            lines.extend(
+                part.strip()
+                for part in asset.document_excerpt.splitlines()
+                if part.strip()
+            )
     for turn in turns:
         if turn.message.strip():
-            lines.extend(part.strip() for part in turn.message.splitlines() if part.strip())
+            lines.extend(
+                part.strip() for part in turn.message.splitlines() if part.strip()
+            )
     if latest_message.strip():
-        lines.extend(part.strip() for part in latest_message.splitlines() if part.strip())
+        lines.extend(
+            part.strip() for part in latest_message.splitlines() if part.strip()
+        )
     return lines
 
 
-def _build_brief_from_sources(payload: IntakeChatRequest | IntakeFinalizeRequest) -> ProjectBriefV1:
+def _build_brief_from_sources(
+    payload: IntakeChatRequest | IntakeFinalizeRequest,
+) -> ProjectBriefV1:
     brief = _empty_project_brief()
-    lines = _find_source_lines(payload.assets, payload.turns, getattr(payload, "message", ""))
+    lines = _find_source_lines(
+        payload.assets, payload.turns, getattr(payload, "message", "")
+    )
     combined_text = "\n".join(lines).strip()
-    extracted_scope = extract_scope(combined_text or getattr(payload, "message", "") or "Property scope not yet provided")
+    extracted_scope = extract_scope(
+        combined_text
+        or getattr(payload, "message", "")
+        or "Property scope not yet provided"
+    )
 
     if extracted_scope.property_context.property_type:
         brief.project_overview.summary = extracted_scope.property_context.property_type
-        _append_fact(brief.project_overview, extracted_scope.property_context.property_type, source="document", confidence="high")
+        _append_fact(
+            brief.project_overview,
+            extracted_scope.property_context.property_type,
+            source="document",
+            confidence="high",
+        )
     if extracted_scope.property_context.location:
-        _append_fact(brief.project_overview, extracted_scope.property_context.location, source="document", confidence="medium")
+        _append_fact(
+            brief.project_overview,
+            extracted_scope.property_context.location,
+            source="document",
+            confidence="medium",
+        )
     for scope_label in extracted_scope.property_context.project_scopes:
-        _append_fact(brief.proposed_layout_scope, scope_label, source="document", confidence="medium")
+        _append_fact(
+            brief.proposed_layout_scope,
+            scope_label,
+            source="document",
+            confidence="medium",
+        )
 
     for room in extracted_scope.rooms:
         _append_fact(
@@ -98,7 +146,13 @@ def _build_brief_from_sources(payload: IntakeChatRequest | IntakeFinalizeRequest
             target = brief.internal_build
         elif section.key in {"electrical", "plumbing", "heating"}:
             target = brief.mep
-        elif section.key in {"plastering", "tiling", "decorating", "flooring", "woodwork_painting"}:
+        elif section.key in {
+            "plastering",
+            "tiling",
+            "decorating",
+            "flooring",
+            "woodwork_painting",
+        }:
             target = brief.finishes
         elif section.key in {"windows"}:
             target = brief.extension_roof_external
@@ -109,16 +163,39 @@ def _build_brief_from_sources(payload: IntakeChatRequest | IntakeFinalizeRequest
         for line in section.lines:
             _append_fact(target, line, source="document", confidence="medium")
         for item in section.count_items:
-            _append_fact(target, f"{item.name}: {item.quantity}", source="document", confidence="medium")
+            _append_fact(
+                target,
+                f"{item.name}: {item.quantity}",
+                source="document",
+                confidence="medium",
+            )
         for item in section.measure_items:
             unit = f" {item.unit}" if item.unit else ""
-            _append_fact(target, f"{item.name}: {item.value}{unit}", source="document", confidence="medium")
+            _append_fact(
+                target,
+                f"{item.name}: {item.value}{unit}",
+                source="document",
+                confidence="medium",
+            )
         for item in section.dimension_items:
-            dims = [value for value in [item.length_m, item.width_m, item.height_m] if value]
+            dims = [
+                value for value in [item.length_m, item.width_m, item.height_m] if value
+            ]
             dims_label = " x ".join(str(value) for value in dims)
-            _append_fact(target, f"{item.name}: {dims_label}", source="document", confidence="medium")
+            _append_fact(
+                target,
+                f"{item.name}: {dims_label}",
+                source="document",
+                confidence="medium",
+            )
 
-    supply_markers = ("client supply", "client supplied", "supply and fit", "by others", "appliances supplied")
+    supply_markers = (
+        "client supply",
+        "client supplied",
+        "supply and fit",
+        "by others",
+        "appliances supplied",
+    )
     for line in lines:
         lowered = line.lower()
         room_match = re.match(
@@ -134,19 +211,72 @@ def _build_brief_from_sources(payload: IntakeChatRequest | IntakeFinalizeRequest
                 confidence="high",
             )
         if lowered.startswith("property:"):
-            _append_fact(brief.project_overview, line.split(":", 1)[1].strip(), source="document", confidence="high")
-        if any(marker in lowered for marker in ("refurb", "renovation", "strip out", "install", "layout")):
-            _append_fact(brief.proposed_layout_scope, line, source="document", confidence="medium")
-        if any(marker in lowered for marker in ("downlight", "socket", "consumer unit", "electrical", "plumbing", "wc", "basin", "shower", "bath")):
+            _append_fact(
+                brief.project_overview,
+                line.split(":", 1)[1].strip(),
+                source="document",
+                confidence="high",
+            )
+        if any(
+            marker in lowered
+            for marker in ("refurb", "renovation", "strip out", "install", "layout")
+        ):
+            _append_fact(
+                brief.proposed_layout_scope,
+                line,
+                source="document",
+                confidence="medium",
+            )
+        if any(
+            marker in lowered
+            for marker in (
+                "downlight",
+                "socket",
+                "consumer unit",
+                "electrical",
+                "plumbing",
+                "wc",
+                "basin",
+                "shower",
+                "bath",
+            )
+        ):
             _append_fact(brief.mep, line, source="document", confidence="medium")
-        if any(marker in lowered for marker in ("paint", "decorate", "plaster", "skim", "tile", "flooring")):
+        if any(
+            marker in lowered
+            for marker in ("paint", "decorate", "plaster", "skim", "tile", "flooring")
+        ):
             _append_fact(brief.finishes, line, source="document", confidence="medium")
         if any(marker in lowered for marker in supply_markers):
-            _append_fact(brief.client_supply_vs_combit_supply, line, source="user", confidence="medium")
-        if any(marker in lowered for marker in ("access", "parking", "occupied", "permit", "scaffold", "skip", "wait and load", "wait & load")):
-            _append_fact(brief.site_conditions, line, source="user", confidence="medium")
-        if any(marker in lowered for marker in ("existing", "current layout", "existing layout", "retain")):
-            _append_fact(brief.existing_layout, line, source="user", confidence="medium")
+            _append_fact(
+                brief.client_supply_vs_combit_supply,
+                line,
+                source="user",
+                confidence="medium",
+            )
+        if any(
+            marker in lowered
+            for marker in (
+                "access",
+                "parking",
+                "occupied",
+                "permit",
+                "scaffold",
+                "skip",
+                "wait and load",
+                "wait & load",
+            )
+        ):
+            _append_fact(
+                brief.site_conditions, line, source="user", confidence="medium"
+            )
+        if any(
+            marker in lowered
+            for marker in ("existing", "current layout", "existing layout", "retain")
+        ):
+            _append_fact(
+                brief.existing_layout, line, source="user", confidence="medium"
+            )
 
     brief.source_documents = [
         {
@@ -166,7 +296,9 @@ def _build_brief_from_sources(payload: IntakeChatRequest | IntakeFinalizeRequest
     return brief
 
 
-def _build_missing_items(project_brief: ProjectBriefV1) -> tuple[list[str], list[IntakeQuestion], list[str]]:
+def _build_missing_items(
+    project_brief: ProjectBriefV1,
+) -> tuple[list[str], list[IntakeQuestion], list[str]]:
     missing_items: list[str] = []
     questions: list[IntakeQuestion] = []
     warnings: list[str] = []
@@ -181,7 +313,9 @@ def _build_missing_items(project_brief: ProjectBriefV1) -> tuple[list[str], list
             )
         )
     if not project_brief.site_conditions.facts:
-        missing_items.append("Site access, scaffold, permits, or occupancy constraints are not clear yet.")
+        missing_items.append(
+            "Site access, scaffold, permits, or occupancy constraints are not clear yet."
+        )
         questions.append(
             IntakeQuestion(
                 id="site-conditions",
@@ -199,12 +333,18 @@ def _build_missing_items(project_brief: ProjectBriefV1) -> tuple[list[str], list
             )
         )
     if not project_brief.mep.facts:
-        warnings.append("MEP scope is still thin. Review whether plumbing, heating, or electrical works are fully captured.")
+        warnings.append(
+            "MEP scope is still thin. Review whether plumbing, heating, or electrical works are fully captured."
+        )
 
     if project_brief.confidence_summary.get("document_warning_count", 0):
-        warnings.append("At least one uploaded document was extraction-poor or needed review.")
+        warnings.append(
+            "At least one uploaded document was extraction-poor or needed review."
+        )
 
-    project_brief.missing_rfi.summary = "Resolve these items before final handoff where possible."
+    project_brief.missing_rfi.summary = (
+        "Resolve these items before final handoff where possible."
+    )
     project_brief.missing_rfi.facts = [
         ProjectBriefFact(text=item, source="ai", confidence="medium", uncertain=True)
         for item in missing_items
@@ -212,7 +352,9 @@ def _build_missing_items(project_brief: ProjectBriefV1) -> tuple[list[str], list
     return missing_items, questions, warnings
 
 
-def _merge_current_brief(current_project_brief_json: dict[str, object], generated_brief: ProjectBriefV1) -> ProjectBriefV1:
+def _merge_current_brief(
+    current_project_brief_json: dict[str, object], generated_brief: ProjectBriefV1
+) -> ProjectBriefV1:
     if not current_project_brief_json:
         return generated_brief
     try:
@@ -227,9 +369,17 @@ def _merge_current_brief(current_project_brief_json: dict[str, object], generate
             if current_value.summary and not generated_value.summary:
                 generated_value.summary = current_value.summary
             for fact in current_value.facts:
-                _append_fact(generated_value, fact.text, source=fact.source, confidence=fact.confidence, uncertain=fact.uncertain)
+                _append_fact(
+                    generated_value,
+                    fact.text,
+                    source=fact.source,
+                    confidence=fact.confidence,
+                    uncertain=fact.uncertain,
+                )
         elif field_name == "source_documents":
-            generated_brief.source_documents = generated_brief.source_documents or current.source_documents
+            generated_brief.source_documents = (
+                generated_brief.source_documents or current.source_documents
+            )
         elif field_name == "confidence_summary":
             combined = dict(current.confidence_summary)
             combined.update(generated_brief.confidence_summary)
@@ -249,15 +399,26 @@ def chat_project_intake(payload: IntakeChatRequest) -> IntakeChatResponse:
                 missing_items=llm_response.missing_items,
                 warnings=llm_response.warnings,
                 ready_to_finalize=llm_response.ready_to_finalize,
-                model_name=str(client.last_metadata.get("model_name") or settings.openai_intake_fast_model),
+                model_name=str(
+                    client.last_metadata.get("model_name")
+                    or settings.openai_intake_fast_model
+                ),
             )
         except Exception:
             if not settings.allow_mock_fallback:
                 raise
 
-    generated_brief = _merge_current_brief(payload.current_project_brief_json, _build_brief_from_sources(payload))
+    generated_brief = _merge_current_brief(
+        payload.current_project_brief_json, _build_brief_from_sources(payload)
+    )
     missing_items, questions, warnings = _build_missing_items(generated_brief)
-    ready_to_finalize = bool(generated_brief.proposed_layout_scope.facts or generated_brief.areas_dimensions.facts) and len(missing_items) <= 1
+    ready_to_finalize = (
+        bool(
+            generated_brief.proposed_layout_scope.facts
+            or generated_brief.areas_dimensions.facts
+        )
+        and len(missing_items) <= 1
+    )
     assistant_message = (
         "Received. Continue."
         if not payload.turns
@@ -285,16 +446,26 @@ def finalize_project_intake(payload: IntakeFinalizeRequest) -> IntakeFinalizeRes
                 final_missing_items=llm_response.final_missing_items,
                 final_warnings=llm_response.final_warnings,
                 handoff_readiness=llm_response.handoff_readiness,
-                model_name=str(client.last_metadata.get("model_name") or settings.openai_intake_model),
+                model_name=str(
+                    client.last_metadata.get("model_name")
+                    or settings.openai_intake_model
+                ),
             )
         except Exception:
             if not settings.allow_mock_fallback:
                 raise
 
-    generated_brief = _merge_current_brief(payload.current_project_brief_json, _build_brief_from_sources(payload))
+    generated_brief = _merge_current_brief(
+        payload.current_project_brief_json, _build_brief_from_sources(payload)
+    )
     missing_items, _questions, warnings = _build_missing_items(generated_brief)
-    structured_scope_markdown = render_project_brief_to_structured_scope(generated_brief)
-    handoff_readiness = bool(structured_scope_markdown.strip()) and bool(generated_brief.proposed_layout_scope.facts or generated_brief.areas_dimensions.facts)
+    structured_scope_markdown = render_project_brief_to_structured_scope(
+        generated_brief
+    )
+    handoff_readiness = bool(structured_scope_markdown.strip()) and bool(
+        generated_brief.proposed_layout_scope.facts
+        or generated_brief.areas_dimensions.facts
+    )
     return IntakeFinalizeResponse(
         project_brief_json=generated_brief,
         structured_scope_markdown=structured_scope_markdown,

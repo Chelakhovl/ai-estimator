@@ -9,7 +9,9 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_MAX_CHAT_TURNS = 20  # keep last 10 exchanges; prevents context overflow on long sessions
+_MAX_CHAT_TURNS = (
+    20  # keep last 10 exchanges; prevents context overflow on long sessions
+)
 
 _SYSTEM_PROMPT = """\
 You are a construction document analyst assistant.
@@ -99,15 +101,20 @@ def chat_about_document(
         messages: list[dict] = [
             {
                 "role": "system",
-                "content": _SYSTEM_PROMPT + "\n\n---\n\n## Current context pack\n\n" + context_markdown,
+                "content": _SYSTEM_PROMPT
+                + "\n\n---\n\n## Current context pack\n\n"
+                + context_markdown,
             }
         ]
 
-        recent_turns = turns[-_MAX_CHAT_TURNS:] if len(turns) > _MAX_CHAT_TURNS else turns
+        recent_turns = (
+            turns[-_MAX_CHAT_TURNS:] if len(turns) > _MAX_CHAT_TURNS else turns
+        )
         if len(turns) > _MAX_CHAT_TURNS:
             logger.info(
                 "Chat history truncated from %d to %d turns to prevent context overflow.",
-                len(turns), _MAX_CHAT_TURNS,
+                len(turns),
+                _MAX_CHAT_TURNS,
             )
         for turn in recent_turns:
             role = turn.get("role", "user")
@@ -125,7 +132,9 @@ def chat_about_document(
             max_tokens=4000,
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
-        logger.info("Document chat completed — model=%s latency=%dms", model, latency_ms)
+        logger.info(
+            "Document chat completed — model=%s latency=%dms", model, latency_ms
+        )
 
         content = response.choices[0].message.content or "{}"
         data = _parse_json(content)

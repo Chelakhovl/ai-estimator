@@ -10,4 +10,6 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health", response_model=HealthResponse)
 def healthcheck() -> HealthResponse:
-    return HealthResponse(status="ok", service="combit-estimator-ai-service", mode=settings.preview_mode)
+    return HealthResponse(
+        status="ok", service="combit-estimator-ai-service", mode=settings.preview_mode
+    )

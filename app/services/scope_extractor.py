@@ -90,7 +90,9 @@ def _resolve_item_name(raw_name: str | None, context: str | None, fallback: str)
     return fallback.strip()
 
 
-def _parse_dimension_item(line: str, section_key: str, context: str | None) -> ExtractedDimensionItem | None:
+def _parse_dimension_item(
+    line: str, section_key: str, context: str | None
+) -> ExtractedDimensionItem | None:
     count = 1.0
     working = line
     plain_dims_match = re.match(
@@ -123,7 +125,9 @@ def _parse_dimension_item(line: str, section_key: str, context: str | None) -> E
                 return None
             name = _resolve_item_name(named_match.group("name"), context, line)
             working = named_match.group("dims")
-            count_prefix = re.match(r"^(?P<count>\d+(?:\.\d+)?)\s*[×x]\s*(?P<rest>.+)$", name, re.IGNORECASE)
+            count_prefix = re.match(
+                r"^(?P<count>\d+(?:\.\d+)?)\s*[×x]\s*(?P<rest>.+)$", name, re.IGNORECASE
+            )
             if count_prefix and "(" in line:
                 count = float(count_prefix.group("count"))
                 name = count_prefix.group("rest").strip()
@@ -151,15 +155,33 @@ def _parse_dimension_item(line: str, section_key: str, context: str | None) -> E
     )
 
 
-def _parse_count_item(line: str, section_key: str, context: str | None) -> ExtractedCountItem | None:
+def _parse_count_item(
+    line: str, section_key: str, context: str | None
+) -> ExtractedCountItem | None:
     patterns = (
-        re.match(r"^(?P<count>\d+(?:\.\d+)?)\s*[×x]\s*(?P<name>.+)$", line, re.IGNORECASE),
-        re.match(r"^Remove\s+(?P<count>\d+(?:\.\d+)?)\s+(?P<name>.+)$", line, re.IGNORECASE),
-        re.match(r"^(?P<name>.+?)\((?P<count>\d+(?:\.\d+)?)\s*total\)$", line, re.IGNORECASE),
+        re.match(
+            r"^(?P<count>\d+(?:\.\d+)?)\s*[×x]\s*(?P<name>.+)$", line, re.IGNORECASE
+        ),
+        re.match(
+            r"^Remove\s+(?P<count>\d+(?:\.\d+)?)\s+(?P<name>.+)$", line, re.IGNORECASE
+        ),
+        re.match(
+            r"^(?P<name>.+?)\((?P<count>\d+(?:\.\d+)?)\s*total\)$", line, re.IGNORECASE
+        ),
         re.match(r"^(?P<name>.+?)\((?P<count>\d+(?:\.\d+)?)\)$", line, re.IGNORECASE),
-        re.match(r"^(?P<count>\d+(?:\.\d+)?)\s*\((?P<name>[^)]+)\)$", line, re.IGNORECASE),
-        re.match(r"^(?P<count>\d+(?:\.\d+)?)\s+(?P<name>[A-Za-z][A-Za-z +/&-]+)$", line, re.IGNORECASE),
-        re.match(r"^(?P<name>Total posts|Junctions|Radiators|Sockets|Switches|Extractor fans)\s*:\s*(?P<count>\d+(?:\.\d+)?)$", line, re.IGNORECASE),
+        re.match(
+            r"^(?P<count>\d+(?:\.\d+)?)\s*\((?P<name>[^)]+)\)$", line, re.IGNORECASE
+        ),
+        re.match(
+            r"^(?P<count>\d+(?:\.\d+)?)\s+(?P<name>[A-Za-z][A-Za-z +/&-]+)$",
+            line,
+            re.IGNORECASE,
+        ),
+        re.match(
+            r"^(?P<name>Total posts|Junctions|Radiators|Sockets|Switches|Extractor fans)\s*:\s*(?P<count>\d+(?:\.\d+)?)$",
+            line,
+            re.IGNORECASE,
+        ),
     )
     for match in patterns:
         if not match:
@@ -188,7 +210,9 @@ def _parse_count_item(line: str, section_key: str, context: str | None) -> Extra
     return None
 
 
-def _parse_measure_item(line: str, section_key: str, context: str | None) -> ExtractedMeasureItem | None:
+def _parse_measure_item(
+    line: str, section_key: str, context: str | None
+) -> ExtractedMeasureItem | None:
     colon_match = re.match(
         r"^(?P<label>[A-Za-z /&()+-]+):\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>m³|m3|m2|m²|m|mm|lm|l)?$",
         line,
@@ -196,7 +220,9 @@ def _parse_measure_item(line: str, section_key: str, context: str | None) -> Ext
     )
     if colon_match:
         label = colon_match.group("label").strip()
-        unit = (colon_match.group("unit") or "").lower().replace("m³", "m3").replace("m²", "m2") or None
+        unit = (colon_match.group("unit") or "").lower().replace("m³", "m3").replace(
+            "m²", "m2"
+        ) or None
         name = f"{context} {label}".strip() if context else label
         return ExtractedMeasureItem(
             section_key=section_key,
@@ -216,7 +242,10 @@ def _parse_measure_item(line: str, section_key: str, context: str | None) -> Ext
             section_key=section_key,
             name=_resolve_item_name(inline_match.group("label"), context, line),
             value=float(inline_match.group("value")),
-            unit=inline_match.group("unit").lower().replace("m³", "m3").replace("m²", "m2"),
+            unit=inline_match.group("unit")
+            .lower()
+            .replace("m³", "m3")
+            .replace("m²", "m2"),
             raw_text=line,
         )
 
@@ -230,7 +259,10 @@ def _parse_measure_item(line: str, section_key: str, context: str | None) -> Ext
             section_key=section_key,
             name=_resolve_item_name(dash_match.group("label"), context, line),
             value=float(dash_match.group("value")),
-            unit=dash_match.group("unit").lower().replace("m³", "m3").replace("m²", "m2"),
+            unit=dash_match.group("unit")
+            .lower()
+            .replace("m³", "m3")
+            .replace("m²", "m2"),
             raw_text=line,
         )
 
@@ -293,17 +325,23 @@ def extract_scope(prompt: str) -> ScopeExtractionResponse:
 
         section = sections.setdefault(
             current_section_key,
-            ExtractedSection(key=current_section_key, title=SECTION_TITLES[current_section_key]),
+            ExtractedSection(
+                key=current_section_key, title=SECTION_TITLES[current_section_key]
+            ),
         )
 
-        if line.endswith(":") and not re.match(r"^(Type|Location):", line, re.IGNORECASE):
+        if line.endswith(":") and not re.match(
+            r"^(Type|Location):", line, re.IGNORECASE
+        ):
             current_context = line[:-1].strip()
             section.lines.append(line)
             continue
 
         section.lines.append(line)
 
-        dimension_item = _parse_dimension_item(line, current_section_key, current_context)
+        dimension_item = _parse_dimension_item(
+            line, current_section_key, current_context
+        )
         if dimension_item:
             section.dimension_items.append(dimension_item)
 
@@ -324,7 +362,16 @@ def extract_scope(prompt: str) -> ScopeExtractionResponse:
             )
         )
 
-    if any(scope.lower() in {"rear extension", "loft conversion", "full house refurbishment", "full house refurb"} for scope in property_context.project_scopes):
+    if any(
+        scope.lower()
+        in {
+            "rear extension",
+            "loft conversion",
+            "full house refurbishment",
+            "full house refurb",
+        }
+        for scope in property_context.project_scopes
+    ):
         assumptions.append(
             PreviewAssumption(
                 text="This prompt contains a large multi-scope project. Use the extracted takeoff as a draft baseline, then review structural, MEP, and allowance items before final pricing.",

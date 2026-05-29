@@ -213,7 +213,6 @@ _NON_DESCRIPTOR_HINT_WORDS = {
 }
 
 
-
 def normalize_prompt(prompt: str) -> str:
     prompt = prompt.replace("\n", ", ")
     prompt = re.sub(r"\s+", " ", prompt)
@@ -222,10 +221,11 @@ def normalize_prompt(prompt: str) -> str:
 
 def _apply_phrase_aliases(value: str) -> str:
     normalized = value.lower()
-    for phrase, replacement in sorted(_PHRASE_ALIASES.items(), key=lambda item: len(item[0]), reverse=True):
+    for phrase, replacement in sorted(
+        _PHRASE_ALIASES.items(), key=lambda item: len(item[0]), reverse=True
+    ):
         normalized = re.sub(rf"\b{re.escape(phrase)}\b", replacement, normalized)
     return normalized
-
 
 
 def split_prompt_segments(prompt: str) -> list[str]:
@@ -236,19 +236,45 @@ def split_prompt_segments(prompt: str) -> list[str]:
         if not part:
             continue
         conjunction_parts = re.split(r"\band\b", part, flags=re.IGNORECASE)
-        shared_quantity = len(re.findall(r"\d+(?:\.\d+)?\s*(?:m2|sqm|sq m|m3|m|pcs|pc|ea)\b", part, re.IGNORECASE)) == 1
+        shared_quantity = (
+            len(
+                re.findall(
+                    r"\d+(?:\.\d+)?\s*(?:m2|sqm|sq m|m3|m|pcs|pc|ea)\b",
+                    part,
+                    re.IGNORECASE,
+                )
+            )
+            == 1
+        )
         if (
             len(conjunction_parts) > 1
             and not shared_quantity
-            and all(len(tokenize(chunk.strip())) >= 2 for chunk in conjunction_parts if chunk.strip())
+            and all(
+                len(tokenize(chunk.strip())) >= 2
+                for chunk in conjunction_parts
+                if chunk.strip()
+            )
         ):
             first_chunk = conjunction_parts[0].strip()
-            action_prefix = next((prefix for prefix in _ACTION_PREFIXES if first_chunk.lower().startswith(prefix)), "")
+            action_prefix = next(
+                (
+                    prefix
+                    for prefix in _ACTION_PREFIXES
+                    if first_chunk.lower().startswith(prefix)
+                ),
+                "",
+            )
             for index, chunk in enumerate(conjunction_parts):
                 chunk = chunk.strip()
                 if not chunk:
                     continue
-                if index > 0 and action_prefix and not any(chunk.lower().startswith(prefix) for prefix in _ACTION_PREFIXES):
+                if (
+                    index > 0
+                    and action_prefix
+                    and not any(
+                        chunk.lower().startswith(prefix) for prefix in _ACTION_PREFIXES
+                    )
+                ):
                     chunk = f"{action_prefix} {chunk}"
                 segments.append(chunk)
         else:
@@ -256,13 +282,11 @@ def split_prompt_segments(prompt: str) -> list[str]:
     return segments or [prompt.strip()]
 
 
-
 def normalize_unit(unit: str | None) -> str | None:
     if not unit:
         return None
     value = unit.strip().lower()
     return _UNIT_ALIASES.get(value, value)
-
 
 
 def parse_quantity_and_unit(segment: str) -> tuple[float | None, str | None]:
@@ -279,14 +303,12 @@ def parse_quantity_and_unit(segment: str) -> tuple[float | None, str | None]:
     return quantity, unit
 
 
-
 def detect_area(segment: str) -> str:
     lower = segment.lower()
     for room in sorted(_ROOM_WORDS, key=len, reverse=True):
         if room in lower:
             return room.title()
     return ""
-
 
 
 def tokenize_terms(value: str) -> list[str]:

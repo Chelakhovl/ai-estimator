@@ -7,7 +7,10 @@ from app.schemas import PreviewAcceptedExample
 from app.schemas import ScopeExtractionResponse
 from app.services.scope_parsing import SECTION_TITLES, infer_section_keys_from_label
 from app.services.scope_matching import match_row_to_extracted_section
-from app.services.scope_takeoff import TAKEOFF_HEURISTICS_SOURCE, TAKEOFF_HEURISTICS_VERSION
+from app.services.scope_takeoff import (
+    TAKEOFF_HEURISTICS_SOURCE,
+    TAKEOFF_HEURISTICS_VERSION,
+)
 
 
 def _compact_mapping(data: dict) -> dict:
@@ -35,13 +38,17 @@ def _compact_mapping(data: dict) -> dict:
     return compact
 
 
-def _build_scope_summary(extracted_scope: ScopeExtractionResponse | None) -> dict | None:
+def _build_scope_summary(
+    extracted_scope: ScopeExtractionResponse | None,
+) -> dict | None:
     if extracted_scope is None:
         return None
 
     property_context = _compact_mapping(extracted_scope.property_context.model_dump())
     rooms = [_compact_mapping(room.model_dump()) for room in extracted_scope.rooms]
-    room_takeoff = [_compact_mapping(room.model_dump()) for room in extracted_scope.room_takeoff]
+    room_takeoff = [
+        _compact_mapping(room.model_dump()) for room in extracted_scope.room_takeoff
+    ]
     takeoff_summary = _compact_mapping(extracted_scope.takeoff_summary.model_dump())
 
     payload = {
@@ -67,17 +74,27 @@ def _scope_summary_as_text(extracted_scope: ScopeExtractionResponse | None) -> s
     if property_context.location:
         lines.append(f"Location: {property_context.location}")
     if takeoff.total_internal_floor_area_m2:
-        lines.append(f"Total internal floor area: {takeoff.total_internal_floor_area_m2} m2")
+        lines.append(
+            f"Total internal floor area: {takeoff.total_internal_floor_area_m2} m2"
+        )
     if takeoff.estimated_wall_finish_area_m2:
-        lines.append(f"Estimated wall finish area: {takeoff.estimated_wall_finish_area_m2} m2")
+        lines.append(
+            f"Estimated wall finish area: {takeoff.estimated_wall_finish_area_m2} m2"
+        )
     if takeoff.estimated_ceiling_finish_area_m2:
-        lines.append(f"Estimated ceiling finish area: {takeoff.estimated_ceiling_finish_area_m2} m2")
+        lines.append(
+            f"Estimated ceiling finish area: {takeoff.estimated_ceiling_finish_area_m2} m2"
+        )
     if takeoff.estimated_skirting_lm:
         lines.append(f"Estimated skirting: {takeoff.estimated_skirting_lm} lm")
     if takeoff.estimated_wet_room_wall_tiling_area_m2:
-        lines.append(f"Wet room wall tiling: {takeoff.estimated_wet_room_wall_tiling_area_m2} m2")
+        lines.append(
+            f"Wet room wall tiling: {takeoff.estimated_wet_room_wall_tiling_area_m2} m2"
+        )
     if takeoff.estimated_wet_room_floor_tiling_area_m2:
-        lines.append(f"Wet room floor tiling: {takeoff.estimated_wet_room_floor_tiling_area_m2} m2")
+        lines.append(
+            f"Wet room floor tiling: {takeoff.estimated_wet_room_floor_tiling_area_m2} m2"
+        )
     if takeoff.downlight_count:
         lines.append(f"Downlights: {takeoff.downlight_count}")
     if takeoff.socket_count:
@@ -105,7 +122,9 @@ def _scope_summary_as_text(extracted_scope: ScopeExtractionResponse | None) -> s
     if room_summaries:
         visible_rooms = room_summaries[:8]
         if len(room_summaries) > len(visible_rooms):
-            visible_rooms.append(f"+{len(room_summaries) - len(visible_rooms)} more rooms")
+            visible_rooms.append(
+                f"+{len(room_summaries) - len(visible_rooms)} more rooms"
+            )
         lines.append(f"Rooms: {'; '.join(visible_rooms)}")
 
     return "\n".join(lines)
@@ -121,7 +140,11 @@ def _build_candidate_scope_hint(
     section_match = match_row_to_extracted_section(
         row,
         extracted_scope,
-        " ".join(filter(None, [row.WorkName, row.WorkGroupName or "", row.GuardrailDetail or ""])),
+        " ".join(
+            filter(
+                None, [row.WorkName, row.WorkGroupName or "", row.GuardrailDetail or ""]
+            )
+        ),
     )
     if section_match is None:
         return {}
@@ -155,11 +178,15 @@ def _fallback_candidate_scope_hint(
     section_key = sorted(section_keys)[0]
     return {
         "suggested_scope_section": section_key,
-        "suggested_scope_section_title": SECTION_TITLES.get(section_key, section_key.replace("_", " ").title()),
+        "suggested_scope_section_title": SECTION_TITLES.get(
+            section_key, section_key.replace("_", " ").title()
+        ),
     }
 
 
-def _build_active_scope_sections(extracted_scope: ScopeExtractionResponse | None) -> list[dict]:
+def _build_active_scope_sections(
+    extracted_scope: ScopeExtractionResponse | None,
+) -> list[dict]:
     if extracted_scope is None:
         return []
 
@@ -167,7 +194,12 @@ def _build_active_scope_sections(extracted_scope: ScopeExtractionResponse | None
     for order, section in enumerate(extracted_scope.sections):
         if section.key in {"property", "full_scope", "floor_areas_rooms"}:
             continue
-        if not (section.lines or section.count_items or section.measure_items or section.dimension_items):
+        if not (
+            section.lines
+            or section.count_items
+            or section.measure_items
+            or section.dimension_items
+        ):
             continue
 
         details = [
@@ -202,7 +234,8 @@ def build_preview_system_prompt(*, retry_mode: bool = False) -> str:
         f"{TAKEOFF_HEURISTICS_VERSION} from {TAKEOFF_HEURISTICS_SOURCE}. They are not the same thing "
         "as the backend canonical pricing registry."
     )
-    return """
+    return (
+        """
 You are a UK refurbishment estimator AI.
 
 Your job:
@@ -591,8 +624,9 @@ Return exactly this JSON object shape:
     }
   ]
 }
-""".replace("__TAKEOFF_HEURISTICS_LINE__", takeoff_heuristics_line).strip() + retry_suffix
-
+""".replace("__TAKEOFF_HEURISTICS_LINE__", takeoff_heuristics_line).strip()
+        + retry_suffix
+    )
 
 
 def build_preview_user_payload(
@@ -604,16 +638,18 @@ def build_preview_user_payload(
 ) -> dict:
     candidate_rows_payload = []
     for row in candidate_rows:
-        candidate_payload = _compact_mapping({
-            "id": row.INSIDEQUOTESGUID,
-            "n": row.WorkName,
-            "g": row.WorkGroupName,
-            "wc": row.WorkItemCode,
-            "u": row.Unit,
-            "nb": row.WorkQTYforNorm,
-            "gc": row.GuardrailCode,
-            "gd": row.GuardrailDetail,
-        })
+        candidate_payload = _compact_mapping(
+            {
+                "id": row.INSIDEQUOTESGUID,
+                "n": row.WorkName,
+                "g": row.WorkGroupName,
+                "wc": row.WorkItemCode,
+                "u": row.Unit,
+                "nb": row.WorkQTYforNorm,
+                "gc": row.GuardrailCode,
+                "gd": row.GuardrailDetail,
+            }
+        )
         scope_hint = _build_candidate_scope_hint(row, extracted_scope)
         if not scope_hint:
             scope_hint = _fallback_candidate_scope_hint(row, extracted_scope)
@@ -637,23 +673,25 @@ def build_preview_user_payload(
     payload: dict = {}
     if document_context:
         payload["document_context"] = document_context
-    payload.update({
-        "prompt": prompt,
-        "candidate_row_key_legend": {
-            "id": "inside_quote_guid",
-            "n": "work_name",
-            "g": "work_group_name",
-            "wc": "work_code",
-            "u": "unit",
-            "nb": "work_qty_norm_basis",
-            "gc": "guardrail_code",
-            "gd": "guardrail_detail",
-            "ss": "suggested_scope_section",
-            "sst": "suggested_scope_section_title",
-            "so": "suggested_scope_section_order",
-        },
-        "candidate_rows": candidate_rows_payload,
-    })
+    payload.update(
+        {
+            "prompt": prompt,
+            "candidate_row_key_legend": {
+                "id": "inside_quote_guid",
+                "n": "work_name",
+                "g": "work_group_name",
+                "wc": "work_code",
+                "u": "unit",
+                "nb": "work_qty_norm_basis",
+                "gc": "guardrail_code",
+                "gd": "guardrail_detail",
+                "ss": "suggested_scope_section",
+                "sst": "suggested_scope_section_title",
+                "so": "suggested_scope_section_order",
+            },
+            "candidate_rows": candidate_rows_payload,
+        }
+    )
     active_scope_sections = _build_active_scope_sections(extracted_scope)
     if active_scope_sections:
         payload["active_scope_sections"] = active_scope_sections
@@ -692,5 +730,7 @@ def build_preview_user_message(
     accepted_examples: list[PreviewAcceptedExample] | None = None,
     document_context: str | None = None,
 ) -> str:
-    payload = build_preview_user_payload(prompt, candidate_rows, extracted_scope, accepted_examples, document_context)
+    payload = build_preview_user_payload(
+        prompt, candidate_rows, extracted_scope, accepted_examples, document_context
+    )
     return json.dumps(payload, ensure_ascii=False, indent=2)

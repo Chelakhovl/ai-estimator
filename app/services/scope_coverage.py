@@ -31,20 +31,143 @@ class ScopeProfile:
 
 
 COMMON_BUCKETS = {
-    "demolition": CoverageBucket("demolition", "strip out / demolition", ("strip", "stripout", "strip-out", "demolition", "demolish", "remove", "removal", "hack", "hackoff")),
-    "plastering": CoverageBucket("plastering", "plastering / wall preparation", ("plaster", "skim", "render", "makegood", "make-good", "patch", "repair")),
-    "decorations": CoverageBucket("decorations", "decorations", ("paint", "painting", "decorate", "decorating")),
-    "flooring": CoverageBucket("flooring", "flooring", ("floor", "flooring", "laminate", "vinyl", "carpet", "underlay", "timber", "wood", "engineered")),
-    "tiling": CoverageBucket("tiling", "tiling / waterproofing", ("tile", "tiling", "grout", "waterproof", "tank", "tanking")),
-    "electrics": CoverageBucket("electrics", "electrics", ("electric", "electrical", "socket", "light", "lighting", "downlight", "switch", "consumer", "alarm")),
-    "plumbing": CoverageBucket("plumbing", "plumbing", ("plumb", "plumbing", "pipe", "sink", "wc", "toilet", "basin", "radiator", "bath", "shower")),
-    "joinery": CoverageBucket("joinery", "joinery / fit-out", ("joinery", "cabinet", "cabinetry", "worktop", "door", "frame", "skirting", "architrave", "kitchen")),
-    "structure": CoverageBucket("structure", "structure / steel / framing", ("steel", "beam", "joist", "structure", "structural", "framing", "frame")),
-    "insulation": CoverageBucket("insulation", "insulation", ("insulation", "insulate")),
-    "partitions": CoverageBucket("partitions", "partitions / plasterboard", ("partition", "stud", "plasterboard", "board", "drywall")),
-    "groundworks": CoverageBucket("groundworks", "groundworks / excavation", ("excavate", "excavation", "dig", "trench", "foundation", "concrete", "slab", "groundwork")),
-    "brickwork": CoverageBucket("brickwork", "brickwork / blockwork", ("brick", "brickwork", "block", "blockwork", "masonry")),
-    "roofing": CoverageBucket("roofing", "roofing", ("roof", "roofing", "joist", "rafter", "felt", "membrane", "tile", "slate", "flatroof", "flat-roof")),
+    "demolition": CoverageBucket(
+        "demolition",
+        "strip out / demolition",
+        (
+            "strip",
+            "stripout",
+            "strip-out",
+            "demolition",
+            "demolish",
+            "remove",
+            "removal",
+            "hack",
+            "hackoff",
+        ),
+    ),
+    "plastering": CoverageBucket(
+        "plastering",
+        "plastering / wall preparation",
+        ("plaster", "skim", "render", "makegood", "make-good", "patch", "repair"),
+    ),
+    "decorations": CoverageBucket(
+        "decorations", "decorations", ("paint", "painting", "decorate", "decorating")
+    ),
+    "flooring": CoverageBucket(
+        "flooring",
+        "flooring",
+        (
+            "floor",
+            "flooring",
+            "laminate",
+            "vinyl",
+            "carpet",
+            "underlay",
+            "timber",
+            "wood",
+            "engineered",
+        ),
+    ),
+    "tiling": CoverageBucket(
+        "tiling",
+        "tiling / waterproofing",
+        ("tile", "tiling", "grout", "waterproof", "tank", "tanking"),
+    ),
+    "electrics": CoverageBucket(
+        "electrics",
+        "electrics",
+        (
+            "electric",
+            "electrical",
+            "socket",
+            "light",
+            "lighting",
+            "downlight",
+            "switch",
+            "consumer",
+            "alarm",
+        ),
+    ),
+    "plumbing": CoverageBucket(
+        "plumbing",
+        "plumbing",
+        (
+            "plumb",
+            "plumbing",
+            "pipe",
+            "sink",
+            "wc",
+            "toilet",
+            "basin",
+            "radiator",
+            "bath",
+            "shower",
+        ),
+    ),
+    "joinery": CoverageBucket(
+        "joinery",
+        "joinery / fit-out",
+        (
+            "joinery",
+            "cabinet",
+            "cabinetry",
+            "worktop",
+            "door",
+            "frame",
+            "skirting",
+            "architrave",
+            "kitchen",
+        ),
+    ),
+    "structure": CoverageBucket(
+        "structure",
+        "structure / steel / framing",
+        ("steel", "beam", "joist", "structure", "structural", "framing", "frame"),
+    ),
+    "insulation": CoverageBucket(
+        "insulation", "insulation", ("insulation", "insulate")
+    ),
+    "partitions": CoverageBucket(
+        "partitions",
+        "partitions / plasterboard",
+        ("partition", "stud", "plasterboard", "board", "drywall"),
+    ),
+    "groundworks": CoverageBucket(
+        "groundworks",
+        "groundworks / excavation",
+        (
+            "excavate",
+            "excavation",
+            "dig",
+            "trench",
+            "foundation",
+            "concrete",
+            "slab",
+            "groundwork",
+        ),
+    ),
+    "brickwork": CoverageBucket(
+        "brickwork",
+        "brickwork / blockwork",
+        ("brick", "brickwork", "block", "blockwork", "masonry"),
+    ),
+    "roofing": CoverageBucket(
+        "roofing",
+        "roofing",
+        (
+            "roof",
+            "roofing",
+            "joist",
+            "rafter",
+            "felt",
+            "membrane",
+            "tile",
+            "slate",
+            "flatroof",
+            "flat-roof",
+        ),
+    ),
 }
 
 
@@ -52,7 +175,12 @@ SCOPE_PROFILES: tuple[ScopeProfile, ...] = (
     ScopeProfile(
         key="kitchen_refurbishment",
         label="kitchen refurbishment",
-        trigger_keywords=("kitchen refurbishment", "kitchen renovation", "new kitchen", "kitchen refit"),
+        trigger_keywords=(
+            "kitchen refurbishment",
+            "kitchen renovation",
+            "new kitchen",
+            "kitchen refit",
+        ),
         room_keywords=("kitchen",),
         expected_buckets=(
             COMMON_BUCKETS["demolition"],
@@ -67,7 +195,12 @@ SCOPE_PROFILES: tuple[ScopeProfile, ...] = (
     ScopeProfile(
         key="bathroom_renovation",
         label="bathroom renovation",
-        trigger_keywords=("bathroom renovation", "bathroom refurb", "new bathroom", "bathroom refit"),
+        trigger_keywords=(
+            "bathroom renovation",
+            "bathroom refurb",
+            "new bathroom",
+            "bathroom refit",
+        ),
         room_keywords=("bathroom",),
         expected_buckets=(
             COMMON_BUCKETS["demolition"],
@@ -95,7 +228,12 @@ SCOPE_PROFILES: tuple[ScopeProfile, ...] = (
     ScopeProfile(
         key="full_property_refresh",
         label="full property refresh",
-        trigger_keywords=("full flat refresh", "full house refresh", "full property refresh", "full redecoration"),
+        trigger_keywords=(
+            "full flat refresh",
+            "full house refresh",
+            "full property refresh",
+            "full redecoration",
+        ),
         room_keywords=("flat", "house", "property"),
         expected_buckets=(
             COMMON_BUCKETS["decorations"],
@@ -109,7 +247,13 @@ SCOPE_PROFILES: tuple[ScopeProfile, ...] = (
     ScopeProfile(
         key="full_house_refurbishment",
         label="full house refurbishment",
-        trigger_keywords=("full refurb", "full house refurb", "whole house renovation", "whole house refurb", "full renovation"),
+        trigger_keywords=(
+            "full refurb",
+            "full house refurb",
+            "whole house renovation",
+            "whole house refurb",
+            "full renovation",
+        ),
         room_keywords=("house", "property"),
         expected_buckets=(
             COMMON_BUCKETS["demolition"],
@@ -124,7 +268,12 @@ SCOPE_PROFILES: tuple[ScopeProfile, ...] = (
     ScopeProfile(
         key="rear_extension",
         label="rear extension",
-        trigger_keywords=("rear extension", "side return extension", "kitchen extension", "ground floor extension"),
+        trigger_keywords=(
+            "rear extension",
+            "side return extension",
+            "kitchen extension",
+            "ground floor extension",
+        ),
         room_keywords=(),
         expected_buckets=(
             COMMON_BUCKETS["groundworks"],
@@ -151,9 +300,16 @@ SECTION_EXPECTED_BUCKETS = {
     "demolition": (COMMON_BUCKETS["demolition"],),
     "groundworks": (COMMON_BUCKETS["groundworks"],),
     "steelworks": (COMMON_BUCKETS["structure"],),
-    "structure": (COMMON_BUCKETS["structure"], COMMON_BUCKETS["brickwork"], COMMON_BUCKETS["roofing"]),
+    "structure": (
+        COMMON_BUCKETS["structure"],
+        COMMON_BUCKETS["brickwork"],
+        COMMON_BUCKETS["roofing"],
+    ),
     "carpentry": (COMMON_BUCKETS["joinery"], COMMON_BUCKETS["partitions"]),
-    "ceilings_and_insulation": (COMMON_BUCKETS["insulation"], COMMON_BUCKETS["plastering"]),
+    "ceilings_and_insulation": (
+        COMMON_BUCKETS["insulation"],
+        COMMON_BUCKETS["plastering"],
+    ),
     "doors": (COMMON_BUCKETS["joinery"],),
     "joinery": (COMMON_BUCKETS["joinery"],),
     "plastering": (COMMON_BUCKETS["plastering"],),
@@ -361,7 +517,16 @@ SECTION_DETAIL_BUCKETS: dict[str, tuple[SectionDetailBucket, ...]] = {
         SectionDetailBucket(
             "roof_edges",
             "roof edges / parapets / upstands",
-            ("parapet", "upstand", "edge trim", "drip trim", "fascia", "soffit", "verge", "coping"),
+            (
+                "parapet",
+                "upstand",
+                "edge trim",
+                "drip trim",
+                "fascia",
+                "soffit",
+                "verge",
+                "coping",
+            ),
             ("parapet", "upstand", "trim", "fascia", "soffit", "verge", "coping"),
         ),
     ),
@@ -369,7 +534,13 @@ SECTION_DETAIL_BUCKETS: dict[str, tuple[SectionDetailBucket, ...]] = {
         SectionDetailBucket(
             "roof_build_up_insulation",
             "roof insulation / rafter build-up",
-            ("between rafters", "under rafters", "rafter", "roof insulation", "insulated board"),
+            (
+                "between rafters",
+                "under rafters",
+                "rafter",
+                "roof insulation",
+                "insulated board",
+            ),
             ("rafter", "insulation", "pir", "board"),
         ),
     ),
@@ -429,29 +600,46 @@ def _detect_scope_profiles(prompt: str) -> list[ScopeProfile]:
         if any(keyword in lowered for keyword in profile.trigger_keywords):
             detected.append(profile)
             continue
-        if profile.key in {"kitchen_refurbishment", "bathroom_renovation", "loft_conversion"} and any(
-            keyword in lowered for keyword in profile.room_keywords
-        ):
+        if profile.key in {
+            "kitchen_refurbishment",
+            "bathroom_renovation",
+            "loft_conversion",
+        } and any(keyword in lowered for keyword in profile.room_keywords):
             detected.append(profile)
     return detected
 
 
-def _detect_scope_profiles_from_extraction(extracted_scope: ScopeExtractionResponse) -> list[ScopeProfile]:
+def _detect_scope_profiles_from_extraction(
+    extracted_scope: ScopeExtractionResponse,
+) -> list[ScopeProfile]:
     lowered_values = {
         value.lower()
         for value in (
             list(extracted_scope.property_context.project_scopes)
-            + [extracted_scope.property_context.property_type, extracted_scope.property_context.location]
+            + [
+                extracted_scope.property_context.property_type,
+                extracted_scope.property_context.location,
+            ]
         )
         if value
     }
     detected: list[ScopeProfile] = []
     for profile in SCOPE_PROFILES:
-        if any(keyword in value for value in lowered_values for keyword in profile.trigger_keywords):
+        if any(
+            keyword in value
+            for value in lowered_values
+            for keyword in profile.trigger_keywords
+        ):
             detected.append(profile)
             continue
-        if profile.key in {"kitchen_refurbishment", "bathroom_renovation", "loft_conversion"} and any(
-            keyword in value for value in lowered_values for keyword in profile.room_keywords
+        if profile.key in {
+            "kitchen_refurbishment",
+            "bathroom_renovation",
+            "loft_conversion",
+        } and any(
+            keyword in value
+            for value in lowered_values
+            for keyword in profile.room_keywords
         ):
             detected.append(profile)
     return detected
@@ -529,7 +717,9 @@ def _room_finish_coverage_assumptions(
 ) -> list[PreviewAssumption]:
     assumptions: list[PreviewAssumption] = []
     finish_section_keys = {"decorating", "flooring", "woodwork_painting"}
-    rooms = sorted(extracted_scope.room_takeoff, key=lambda room: len(room.name), reverse=True)
+    rooms = sorted(
+        extracted_scope.room_takeoff, key=lambda room: len(room.name), reverse=True
+    )
 
     for section in extracted_scope.sections:
         if section.key not in finish_section_keys or not section.lines:
@@ -540,7 +730,16 @@ def _room_finish_coverage_assumptions(
             normalized = line.lower()
             if not normalized or normalized.endswith(":"):
                 continue
-            if any(keyword in normalized for keyword in ("by others", "excluded", "exclude", "by owner", "not in scope")):
+            if any(
+                keyword in normalized
+                for keyword in (
+                    "by others",
+                    "excluded",
+                    "exclude",
+                    "by owner",
+                    "not in scope",
+                )
+            ):
                 continue
             for room in rooms:
                 room_name = room.name.lower()
@@ -550,18 +749,26 @@ def _room_finish_coverage_assumptions(
         if not explicitly_named_rooms:
             continue
 
-        section_rows = [row for row in matched_rows if row.MatchedSectionKey == section.key]
+        section_rows = [
+            row for row in matched_rows if row.MatchedSectionKey == section.key
+        ]
         if not section_rows:
             continue
 
         covered_rooms: set[str] = set()
         for row in section_rows:
-            row_text = " ".join(filter(None, [row.WorkName, row.AREA or "", row.ReviewReason or ""])).lower()
+            row_text = " ".join(
+                filter(None, [row.WorkName, row.AREA or "", row.ReviewReason or ""])
+            ).lower()
             for room_name in explicitly_named_rooms:
                 if room_name.lower() in row_text:
                     covered_rooms.add(room_name)
 
-        missing_rooms = [room_name for room_name in explicitly_named_rooms if room_name not in covered_rooms]
+        missing_rooms = [
+            room_name
+            for room_name in explicitly_named_rooms
+            if room_name not in covered_rooms
+        ]
         if missing_rooms:
             assumptions.append(
                 PreviewAssumption(
@@ -589,7 +796,9 @@ def _level_joinery_coverage_assumptions(
         if section.key not in supported_sections or not section.lines:
             continue
 
-        section_rows = [row for row in matched_rows if row.MatchedSectionKey == section.key]
+        section_rows = [
+            row for row in matched_rows if row.MatchedSectionKey == section.key
+        ]
         if not section_rows:
             continue
 
@@ -610,7 +819,16 @@ def _level_joinery_coverage_assumptions(
             if normalized.endswith(":"):
                 continue
 
-            if any(keyword in normalized for keyword in ("by others", "excluded", "exclude", "by owner", "not in scope")):
+            if any(
+                keyword in normalized
+                for keyword in (
+                    "by others",
+                    "excluded",
+                    "exclude",
+                    "by owner",
+                    "not in scope",
+                )
+            ):
                 continue
 
             line_levels = [level for level in supported_levels if level in normalized]
@@ -626,12 +844,16 @@ def _level_joinery_coverage_assumptions(
 
         covered_levels: set[str] = set()
         for row in section_rows:
-            row_text = " ".join(filter(None, [row.WorkName, row.AREA or "", row.ReviewReason or ""])).lower()
+            row_text = " ".join(
+                filter(None, [row.WorkName, row.AREA or "", row.ReviewReason or ""])
+            ).lower()
             for level in explicit_levels:
                 if level in row_text:
                     covered_levels.add(level)
 
-        missing_levels = [level.title() for level in explicit_levels if level not in covered_levels]
+        missing_levels = [
+            level.title() for level in explicit_levels if level not in covered_levels
+        ]
         if missing_levels:
             assumptions.append(
                 PreviewAssumption(
@@ -655,12 +877,24 @@ def build_scope_coverage_assumptions(
     matched_tokens = _matched_scope_tokens(matched_rows)
     assumptions: list[PreviewAssumption] = []
     if extracted_scope:
-        assumptions.extend(_section_completeness_assumptions(extracted_scope, matched_tokens))
-        assumptions.extend(_section_detail_coverage_assumptions(extracted_scope, matched_tokens))
-        assumptions.extend(_room_finish_coverage_assumptions(extracted_scope, matched_rows))
-        assumptions.extend(_level_joinery_coverage_assumptions(extracted_scope, matched_rows))
+        assumptions.extend(
+            _section_completeness_assumptions(extracted_scope, matched_tokens)
+        )
+        assumptions.extend(
+            _section_detail_coverage_assumptions(extracted_scope, matched_tokens)
+        )
+        assumptions.extend(
+            _room_finish_coverage_assumptions(extracted_scope, matched_rows)
+        )
+        assumptions.extend(
+            _level_joinery_coverage_assumptions(extracted_scope, matched_rows)
+        )
 
-    profiles = _detect_scope_profiles_from_extraction(extracted_scope) if extracted_scope else []
+    profiles = (
+        _detect_scope_profiles_from_extraction(extracted_scope)
+        if extracted_scope
+        else []
+    )
     if not profiles:
         profiles = _detect_scope_profiles(prompt)
     if not profiles:

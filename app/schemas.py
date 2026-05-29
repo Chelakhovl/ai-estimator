@@ -51,9 +51,13 @@ class PreviewRequest(BaseModel):
     rules_context: PreviewRulesContext | None = None
     normalized_prompt_markdown: str | None = None
     normalized_scope: ScopeExtractionResponse | None = None
-    clarification_answers: list["PromptNormalizationAnswer"] = Field(default_factory=list)
+    clarification_answers: list["PromptNormalizationAnswer"] = Field(
+        default_factory=list
+    )
     intake_confidence: float | None = Field(default=None, ge=0, le=1)
-    document_context: str | None = None  # AI-synthesized project context from Document Analysis
+    document_context: str | None = (
+        None  # AI-synthesized project context from Document Analysis
+    )
 
 
 class ScopeExtractionRequest(BaseModel):
@@ -449,7 +453,9 @@ class PreviewResponse(BaseModel):
     coverage_prompts: list[PreviewCoveragePrompt] = Field(default_factory=list)
     telemetry: PreviewTelemetry = Field(default_factory=PreviewTelemetry)
     warnings: list[str] = Field(default_factory=list)
-    coverage_summary: PreviewCoverageSummary = Field(default_factory=PreviewCoverageSummary)
+    coverage_summary: PreviewCoverageSummary = Field(
+        default_factory=PreviewCoverageSummary
+    )
     error_text: str = ""
 
 

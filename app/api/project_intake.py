@@ -11,7 +11,10 @@ from app.schemas import (
     IntakeFinalizeResponse,
 )
 from app.security import require_api_key
-from app.services.project_intake_service import chat_project_intake, finalize_project_intake
+from app.services.project_intake_service import (
+    chat_project_intake,
+    finalize_project_intake,
+)
 
 router = APIRouter(prefix="/v1/project-intake", tags=["project-intake"])
 

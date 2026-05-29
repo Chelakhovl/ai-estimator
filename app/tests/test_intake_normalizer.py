@@ -40,7 +40,9 @@ Sanitaryware: client supply (toilet, basin, shower, bath)
     assert all(room.level == "First Floor" for room in response.normalized_scope.rooms)
 
 
-def test_normalize_prompt_requests_bathroom_fixture_clarification_when_scope_is_ambiguous() -> None:
+def test_normalize_prompt_requests_bathroom_fixture_clarification_when_scope_is_ambiguous() -> (
+    None
+):
     prompt = """
 Property
 Type: Flat
@@ -56,8 +58,12 @@ Floor tiling to bathroom
     response = normalize_intake_prompt(PromptNormalizationRequest(prompt=prompt))
 
     assert response.status == "needs_clarification"
-    assert any(question.id == "bathroom_fixture_scope" for question in response.questions)
-    assert any(blocker.code == "bathroom_fixture_scope" for blocker in response.blockers)
+    assert any(
+        question.id == "bathroom_fixture_scope" for question in response.questions
+    )
+    assert any(
+        blocker.code == "bathroom_fixture_scope" for blocker in response.blockers
+    )
     assert response.missing_items
 
 
@@ -98,11 +104,17 @@ Kitchen: 3.5 x 4.2, Living room: 4.0 x 5.0, Bathroom: 2.0 x 2.5
 
     assert response.normalized_scope is not None
     assert len(response.normalized_scope.rooms) == 3
-    assert {room.name for room in response.normalized_scope.rooms} == {"Kitchen", "Living room", "Bathroom"}
+    assert {room.name for room in response.normalized_scope.rooms} == {
+        "Kitchen",
+        "Living room",
+        "Bathroom",
+    }
     assert all(room.level == "First Floor" for room in response.normalized_scope.rooms)
 
 
-def test_normalize_prompt_does_not_ask_supply_split_when_scope_already_says_supply() -> None:
+def test_normalize_prompt_does_not_ask_supply_split_when_scope_already_says_supply() -> (
+    None
+):
     prompt = """
 KITCHEN
 Supply kitchen units
@@ -114,7 +126,9 @@ Install kitchen units
     assert all(question.id != "supply_split" for question in response.questions)
 
 
-def test_normalize_prompt_does_not_ask_supply_split_when_scope_says_supply_and_fit() -> None:
+def test_normalize_prompt_does_not_ask_supply_split_when_scope_says_supply_and_fit() -> (
+    None
+):
     prompt = """
 KITCHEN
 Supply and fit kitchen units
@@ -126,7 +140,9 @@ Install kitchen worktop
     assert all(question.id != "supply_split" for question in response.questions)
 
 
-def test_normalize_prompt_keeps_full_house_room_schedule_without_false_heading_resets() -> None:
+def test_normalize_prompt_keeps_full_house_room_schedule_without_false_heading_resets() -> (
+    None
+):
     prompt = """
 Type: Semi-detached house
 Location: Outskirts of London
@@ -188,9 +204,17 @@ General: 6 switches
     response = normalize_intake_prompt(PromptNormalizationRequest(prompt=prompt))
 
     assert "ELECTRICAL:" in response.normalized_prompt_markdown
-    assert "Kitchen: 15 spotlights, 10 double sockets, appliance connections" in response.normalized_prompt_markdown
-    assert "Bathroom: 6 spotlights, 1 extractor fan, UFH thermostat connection" in response.normalized_prompt_markdown
-    assert "FULL SCOPE:\nConnect all appliances" not in response.normalized_prompt_markdown
+    assert (
+        "Kitchen: 15 spotlights, 10 double sockets, appliance connections"
+        in response.normalized_prompt_markdown
+    )
+    assert (
+        "Bathroom: 6 spotlights, 1 extractor fan, UFH thermostat connection"
+        in response.normalized_prompt_markdown
+    )
+    assert (
+        "FULL SCOPE:\nConnect all appliances" not in response.normalized_prompt_markdown
+    )
 
 
 def test_normalize_prompt_does_not_repeat_steel_clarification_after_answer() -> None:
@@ -215,7 +239,9 @@ UC columns
     assert all(question.id != "steel_scope_detail" for question in response.questions)
 
 
-def test_normalize_prompt_requests_scaffold_clarification_when_access_scope_is_mentioned() -> None:
+def test_normalize_prompt_requests_scaffold_clarification_when_access_scope_is_mentioned() -> (
+    None
+):
     prompt = """
 FULL SCOPE
 Scaffolding to rear elevation for roof and render works
@@ -224,11 +250,17 @@ Scaffolding to rear elevation for roof and render works
     response = normalize_intake_prompt(PromptNormalizationRequest(prompt=prompt))
 
     assert response.status == "needs_clarification"
-    assert any(question.id == "scaffold_allowance_scope" for question in response.questions)
-    assert any(blocker.code == "scaffold_allowance_scope" for blocker in response.blockers)
+    assert any(
+        question.id == "scaffold_allowance_scope" for question in response.questions
+    )
+    assert any(
+        blocker.code == "scaffold_allowance_scope" for blocker in response.blockers
+    )
 
 
-def test_normalize_prompt_requests_waste_access_clarification_for_restricted_access_scope() -> None:
+def test_normalize_prompt_requests_waste_access_clarification_for_restricted_access_scope() -> (
+    None
+):
     prompt = """
 FULL SCOPE
 Bag out demolition waste through the house with restricted access to the rear garden

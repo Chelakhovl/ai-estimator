@@ -58,12 +58,14 @@ def _coerce_rooms(raw: list) -> list[EnrichedRoom]:
     for item in raw or []:
         if not isinstance(item, dict):
             continue
-        rooms.append(EnrichedRoom(
-            name=str(item.get("name", "")).strip(),
-            floor_level=item.get("floor_level") or None,
-            width_m=item.get("width_m") or None,
-            length_m=item.get("length_m") or None,
-        ))
+        rooms.append(
+            EnrichedRoom(
+                name=str(item.get("name", "")).strip(),
+                floor_level=item.get("floor_level") or None,
+                width_m=item.get("width_m") or None,
+                length_m=item.get("length_m") or None,
+            )
+        )
     return [r for r in rooms if r.name]
 
 
@@ -72,11 +74,13 @@ def _coerce_dimensions(raw: list) -> list[EnrichedDimension]:
     for item in raw or []:
         if not isinstance(item, dict):
             continue
-        dims.append(EnrichedDimension(
-            element=str(item.get("element", "")).strip(),
-            width_m=item.get("width_m") or None,
-            length_m=item.get("length_m") or None,
-        ))
+        dims.append(
+            EnrichedDimension(
+                element=str(item.get("element", "")).strip(),
+                width_m=item.get("width_m") or None,
+                length_m=item.get("length_m") or None,
+            )
+        )
     return [d for d in dims if d.element]
 
 
@@ -85,10 +89,12 @@ def _coerce_work_items(raw: list) -> list[EnrichedWorkItem]:
     for item in raw or []:
         if not isinstance(item, dict):
             continue
-        items.append(EnrichedWorkItem(
-            trade=str(item.get("trade", "general")).strip(),
-            description=str(item.get("description", "")).strip(),
-        ))
+        items.append(
+            EnrichedWorkItem(
+                trade=str(item.get("trade", "general")).strip(),
+                description=str(item.get("description", "")).strip(),
+            )
+        )
     return [i for i in items if i.description]
 
 

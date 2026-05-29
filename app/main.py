@@ -26,9 +26,7 @@ async def lifespan(app: FastAPI):
             "OPENAI_API_KEY is not set — all AI endpoints will run in mock/degraded mode."
         )
     if not settings.openai_model:
-        logger.warning(
-            "OPENAI_MODEL is not set — preview endpoint will use mock mode."
-        )
+        logger.warning("OPENAI_MODEL is not set — preview endpoint will use mock mode.")
     if not settings.service_api_key:
         if is_local:
             logger.warning(

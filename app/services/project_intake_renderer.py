@@ -2,23 +2,78 @@ from __future__ import annotations
 
 from app.schemas import ProjectBriefSection, ProjectBriefV1
 
-_PLUMBING_KW = frozenset([
-    "plumb", "water supply", "soil", "waste", "basin", "bath", "shower", "wc", "toilet",
-    "radiator", "boiler", "cylinder", "ufh", "underfloor heat", "gas", "heating", "sink",
-    "tap", "sanitar", "powerflush", "pump", "cistern", "valve", "hot water", "cold water",
-])
-_ELECTRICAL_KW = frozenset([
-    "electr", "socket", "switch", " light", "downlight", "consumer unit", "fuse board",
-    "alarm", "extractor fan", "rewire", "cable", "pendant", "spot", "power point",
-    "tv point", "data point", "circuit", "ev charge", "doorbell",
-])
+_PLUMBING_KW = frozenset(
+    [
+        "plumb",
+        "water supply",
+        "soil",
+        "waste",
+        "basin",
+        "bath",
+        "shower",
+        "wc",
+        "toilet",
+        "radiator",
+        "boiler",
+        "cylinder",
+        "ufh",
+        "underfloor heat",
+        "gas",
+        "heating",
+        "sink",
+        "tap",
+        "sanitar",
+        "powerflush",
+        "pump",
+        "cistern",
+        "valve",
+        "hot water",
+        "cold water",
+    ]
+)
+_ELECTRICAL_KW = frozenset(
+    [
+        "electr",
+        "socket",
+        "switch",
+        " light",
+        "downlight",
+        "consumer unit",
+        "fuse board",
+        "alarm",
+        "extractor fan",
+        "rewire",
+        "cable",
+        "pendant",
+        "spot",
+        "power point",
+        "tv point",
+        "data point",
+        "circuit",
+        "ev charge",
+        "doorbell",
+    ]
+)
 _PLASTERING_KW = frozenset(["plaster", "skim", "render", "dot and dab"])
 _TILING_KW = frozenset(["til", "grout", "mosaic", "porcelain", "ceramic"])
-_DECORATING_KW = frozenset(["paint", "decorat", "decor", "emulsion", "gloss", "mist coat", "redecorate"])
-_FLOORING_KW = frozenset([
-    "floor", "screed", "carpet", "laminate", "hardwood", "timber board",
-    "lvt", "vinyl", "parquet", "engineered", "subfloor",
-])
+_DECORATING_KW = frozenset(
+    ["paint", "decorat", "decor", "emulsion", "gloss", "mist coat", "redecorate"]
+)
+_FLOORING_KW = frozenset(
+    [
+        "floor",
+        "screed",
+        "carpet",
+        "laminate",
+        "hardwood",
+        "timber board",
+        "lvt",
+        "vinyl",
+        "parquet",
+        "engineered",
+        "subfloor",
+    ]
+)
 
 
 def _section_lines(section: ProjectBriefSection) -> list[str]:
@@ -54,7 +109,9 @@ def _split_mep(lines: list[str]) -> tuple[list[str], list[str]]:
     return plumbing + unmatched, electrical
 
 
-def _split_finishes(lines: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
+def _split_finishes(
+    lines: list[str],
+) -> tuple[list[str], list[str], list[str], list[str]]:
     plastering: list[str] = []
     tiling: list[str] = []
     decorating: list[str] = []
@@ -89,7 +146,9 @@ def render_project_brief_to_structured_scope(project_brief: ProjectBriefV1) -> s
     plumbing_lines, electrical_lines = _split_mep(mep_lines)
 
     finishes_lines = _section_lines(project_brief.finishes)
-    plastering_lines, tiling_lines, decorating_lines, flooring_lines = _split_finishes(finishes_lines)
+    plastering_lines, tiling_lines, decorating_lines, flooring_lines = _split_finishes(
+        finishes_lines
+    )
 
     sections: list[tuple[str, list[str]]] = [
         ("PROPERTY", [f"Type: {property_type}", f"Location: {location}"]),
