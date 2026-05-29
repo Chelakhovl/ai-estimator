@@ -30,7 +30,7 @@ class IntakeLLMClient:
             self.client = OpenAI(
                 api_key=settings.openai_api_key,
                 timeout=settings.openai_timeout_seconds,
-                max_retries=0,
+                max_retries=3,
             )
 
     def is_enabled(self) -> bool:
