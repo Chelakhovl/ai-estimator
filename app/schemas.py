@@ -660,4 +660,82 @@ class LLMIntakeFinalizeOutput(BaseModel):
     structured_scope_markdown: str
     final_missing_items: list[str] = Field(default_factory=list)
     final_warnings: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Custom Work Creator chat schemas
+# ---------------------------------------------------------------------------
+
+
+class CustomWorkChatMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class CatalogWorkGroupContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+
+
+class CatalogLabourRateContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    name: str
+    net_rate: float
+
+
+class CatalogContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    work_groups: list[CatalogWorkGroupContext] = Field(default_factory=list)
+    labour_rates: list[CatalogLabourRateContext] = Field(default_factory=list)
+
+
+class CustomWorkProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    description: str
+    unit: str  # m2 | lm | m3 | each | nr
+    labour_cost: float
+    material_cost: float
+    other_cost: float
+    work_days: float
+    qty_for_norm: float
+    suggested_work_group_id: int
+    suggested_work_group_name: str
+    market_justification: str
+    price_source_notes: str  # explicit source attribution per cost line
+    confidence_level: float  # 0.0–1.0
+
+
+class CustomWorkChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    messages: list[CustomWorkChatMessage] = Field(min_length=1)
+    catalog_context: CatalogContext
+
+
+class CustomWorkChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+    status: str  # "chatting" | "proposing"
+    work_proposal: CustomWorkProposal | None = None
+    model_name: str = ""
+
+
+class LLMCustomWorkOutput(BaseModel):
+    """Internal structured output model used by responses.parse — not exposed in the API."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+    status: str  # "chatting" | "proposing"
+    work_proposal: CustomWorkProposal | None = None
     handoff_readiness: bool = False

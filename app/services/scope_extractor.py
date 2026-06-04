@@ -22,9 +22,11 @@ from app.services.scope_parsing import (
     prepare_prompt_lines,
     split_project_scope_line,
 )
-from app.services.scope_takeoff import (
+from app.services.generated_takeoff_defaults import (
     TAKEOFF_HEURISTICS_SOURCE,
     TAKEOFF_HEURISTICS_VERSION,
+)
+from app.services.scope_takeoff import (
     build_room_takeoff_with_overrides,
     build_takeoff_summary,
 )

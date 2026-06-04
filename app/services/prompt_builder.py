@@ -7,7 +7,7 @@ from app.schemas import PreviewAcceptedExample
 from app.schemas import ScopeExtractionResponse
 from app.services.scope_parsing import SECTION_TITLES, infer_section_keys_from_label
 from app.services.scope_matching import match_row_to_extracted_section
-from app.services.scope_takeoff import (
+from app.services.generated_takeoff_defaults import (
     TAKEOFF_HEURISTICS_SOURCE,
     TAKEOFF_HEURISTICS_VERSION,
 )

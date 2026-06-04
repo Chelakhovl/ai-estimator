@@ -20,7 +20,7 @@ from app.services.prompt_builder import (
 )
 from app.services.scope_extractor import extract_scope
 from app.services.scope_matching import match_row_to_extracted_section
-from app.services.scope_takeoff import (
+from app.services.generated_takeoff_defaults import (
     TAKEOFF_HEURISTICS_SOURCE,
     TAKEOFF_HEURISTICS_VERSION,
 )
