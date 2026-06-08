@@ -96,26 +96,20 @@ class CustomWorkLLMClient:
     def is_enabled(self) -> bool:
         return self.enabled and self.client is not None
 
-    def _supports_responses_parse(self) -> bool:
-        if self.client is None:
-            return False
-        responses_api = getattr(self.client, "responses", None)
-        return callable(getattr(responses_api, "parse", None))
-
     def chat(
         self,
         messages: list,
         catalog_context: CatalogContext,
     ) -> LLMCustomWorkOutput:
-        if not self.is_enabled() or not self._supports_responses_parse():
+        if not self.is_enabled():
             raise RuntimeError("Custom work LLM is not configured.")
         started_at = perf_counter()
-        response = self.client.responses.parse(  # type: ignore[union-attr]
+        response = self.client.beta.chat.completions.parse(  # type: ignore[union-attr]
             model=self.model,
-            input=_build_messages(catalog_context, messages),
-            text_format=LLMCustomWorkOutput,
+            messages=_build_messages(catalog_context, messages),
+            response_format=LLMCustomWorkOutput,
         )
-        parsed = getattr(response, "output_parsed", None)
+        parsed = response.choices[0].message.parsed
         if parsed is None:
             raise RuntimeError("Custom work chat returned no structured output.")
         self.last_metadata = {
