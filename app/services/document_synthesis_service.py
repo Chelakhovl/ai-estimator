@@ -169,15 +169,26 @@ def synthesize_document_to_markdown(*, page_bundles: list[dict]) -> dict:
             max_tokens=16000,
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
+        raw_usage = response.usage
+        usage = (
+            {
+                "prompt_tokens": raw_usage.prompt_tokens,
+                "completion_tokens": raw_usage.completion_tokens,
+                "total_tokens": raw_usage.total_tokens,
+            }
+            if raw_usage
+            else None
+        )
         logger.info(
-            "Document synthesis completed — model=%s pages=%d latency=%dms",
+            "Document synthesis completed — model=%s pages=%d latency=%dms prompt=%d completion=%d",
             model,
             len(page_bundles),
             latency_ms,
+            usage["prompt_tokens"] if usage else 0,
+            usage["completion_tokens"] if usage else 0,
         )
-
         markdown = (response.choices[0].message.content or "").strip()
-        return {"markdown": markdown, "model_name": model}
+        return {"markdown": markdown, "model_name": model, "usage": usage}
 
     except Exception as exc:
         logger.warning("Document synthesis failed: %s", exc)

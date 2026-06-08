@@ -9,9 +9,8 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_MAX_CHAT_TURNS = (
-    20  # keep last 10 exchanges; prevents context overflow on long sessions
-)
+_MAX_RECENT_TURNS = 15  # keep this many turns verbatim
+_SUMMARISE_THRESHOLD = 20  # trigger compression when history exceeds this
 
 _SYSTEM_PROMPT = """\
 You are a construction document analyst assistant.
@@ -68,6 +67,33 @@ def _parse_json(content: str) -> dict:
     return fallback
 
 
+def _summarise_turns(turns: list[dict], client: object, model: str) -> str:
+    """Summarise a slice of chat history into 3-5 bullet points."""
+    text = "\n".join(
+        f"{t.get('role', 'user').upper()}: {t.get('message', '')}"
+        for t in turns
+        if t.get("role") in ("user", "assistant") and t.get("message")
+    )
+    if not text.strip():
+        return ""
+    try:
+        resp = client.chat.completions.create(  # type: ignore[attr-defined]
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Summarise this construction document chat in 3-5 concise bullet points. Include only factual corrections and additions the user made. Be brief.",
+                },
+                {"role": "user", "content": text},
+            ],
+            max_tokens=400,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as exc:
+        logger.warning("Chat history summarisation failed: %s", exc)
+        return ""
+
+
 def chat_about_document(
     *,
     context_markdown: str,
@@ -82,6 +108,8 @@ def chat_about_document(
             "assistant_message": str,
             "updated_markdown": str | None,
             "model_name": str,
+            "summary_used": bool,
+            "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int} | None,
         }
     """
     if not settings.openai_api_key:
@@ -89,6 +117,8 @@ def chat_about_document(
             "assistant_message": "AI service is not configured (no OpenAI key).",
             "updated_markdown": None,
             "model_name": "",
+            "summary_used": False,
+            "usage": None,
         }
 
     model = settings.openai_intake_fast_model or "gpt-4o-mini"
@@ -111,15 +141,29 @@ def chat_about_document(
             }
         ]
 
-        recent_turns = (
-            turns[-_MAX_CHAT_TURNS:] if len(turns) > _MAX_CHAT_TURNS else turns
-        )
-        if len(turns) > _MAX_CHAT_TURNS:
-            logger.info(
-                "Chat history truncated from %d to %d turns to prevent context overflow.",
-                len(turns),
-                _MAX_CHAT_TURNS,
-            )
+        summary_used = False
+        if len(turns) > _SUMMARISE_THRESHOLD:
+            old_turns = turns[:-_MAX_RECENT_TURNS]
+            recent_turns = turns[-_MAX_RECENT_TURNS:]
+            summary = _summarise_turns(old_turns, client, model)
+            if summary:
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": f"Earlier conversation summary (first {len(old_turns)} turns):\n{summary}",
+                    }
+                )
+                summary_used = True
+                logger.info(
+                    "Chat history compressed: %d old turns summarised, %d recent turns kept",
+                    len(old_turns),
+                    len(recent_turns),
+                )
+            else:
+                recent_turns = turns[-_MAX_RECENT_TURNS:]
+        else:
+            recent_turns = turns
+
         for turn in recent_turns:
             role = turn.get("role", "user")
             content = turn.get("message", "")
@@ -136,13 +180,30 @@ def chat_about_document(
             max_tokens=4000,
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
+
+        raw_usage = response.usage
+        usage = (
+            {
+                "prompt_tokens": raw_usage.prompt_tokens,
+                "completion_tokens": raw_usage.completion_tokens,
+                "total_tokens": raw_usage.total_tokens,
+            }
+            if raw_usage
+            else None
+        )
         logger.info(
-            "Document chat completed — model=%s latency=%dms", model, latency_ms
+            "Document chat completed — model=%s latency=%dms prompt=%d completion=%d",
+            model,
+            latency_ms,
+            usage["prompt_tokens"] if usage else 0,
+            usage["completion_tokens"] if usage else 0,
         )
 
         content = response.choices[0].message.content or "{}"
         data = _parse_json(content)
         data["model_name"] = model
+        data["summary_used"] = summary_used
+        data["usage"] = usage
         return data
 
     except Exception as exc:
@@ -151,4 +212,6 @@ def chat_about_document(
             "assistant_message": f"AI request failed: {exc}",
             "updated_markdown": None,
             "model_name": "",
+            "summary_used": False,
+            "usage": None,
         }

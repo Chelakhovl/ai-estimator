@@ -386,13 +386,25 @@ def enrich_page_with_vision(
         )
 
         latency_ms = int((perf_counter() - started_at) * 1000)
+        raw_usage = response.usage
+        usage = (
+            {
+                "prompt_tokens": raw_usage.prompt_tokens,
+                "completion_tokens": raw_usage.completion_tokens,
+                "total_tokens": raw_usage.total_tokens,
+            }
+            if raw_usage
+            else None
+        )
         logger.info(
-            "Vision enrichment p%s of '%s' (type=%s) — model=%s latency=%dms",
+            "Vision enrichment p%s of '%s' (type=%s) — model=%s latency=%dms prompt=%d completion=%d",
             page_number,
             source_file,
             page_type,
             model,
             latency_ms,
+            usage["prompt_tokens"] if usage else 0,
+            usage["completion_tokens"] if usage else 0,
         )
 
         content = response.choices[0].message.content or "{}"
@@ -400,6 +412,7 @@ def enrich_page_with_vision(
         data["model_name"] = model
         data["used_vision"] = True
         data["fallback_reason"] = None
+        data["usage"] = usage
         data.setdefault("description", "")
         return data
 

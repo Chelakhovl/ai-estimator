@@ -51,6 +51,7 @@ class EnrichPageResponse(BaseModel):
     model_name: str
     used_vision: bool
     fallback_reason: str | None = None
+    usage: dict[str, int] | None = None
 
 
 def _coerce_rooms(raw: list) -> list[EnrichedRoom]:
@@ -113,6 +114,8 @@ class ChatResponse(BaseModel):
     assistant_message: str
     updated_markdown: str | None = None
     model_name: str
+    summary_used: bool = False
+    usage: dict[str, int] | None = None
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -129,6 +132,8 @@ def chat(
         assistant_message=result.get("assistant_message", ""),
         updated_markdown=result.get("updated_markdown"),
         model_name=result.get("model_name", ""),
+        summary_used=result.get("summary_used", False),
+        usage=result.get("usage"),
     )
 
 
@@ -148,6 +153,7 @@ class SynthesizeRequest(BaseModel):
 class SynthesizeResponse(BaseModel):
     markdown: str
     model_name: str
+    usage: dict[str, int] | None = None
 
 
 @router.post("/synthesize", response_model=SynthesizeResponse)
@@ -161,6 +167,7 @@ def synthesize(
     return SynthesizeResponse(
         markdown=result.get("markdown", ""),
         model_name=result.get("model_name", ""),
+        usage=result.get("usage"),
     )
 
 
@@ -188,4 +195,5 @@ def enrich_page(
         model_name=raw.get("model_name", ""),
         used_vision=raw.get("used_vision", False),
         fallback_reason=raw.get("fallback_reason"),
+        usage=raw.get("usage"),
     )
