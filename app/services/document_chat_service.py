@@ -20,21 +20,25 @@ The context pack is provided below as markdown.
 
 Your job:
 1. Answer questions about the extracted data clearly and concisely.
-2. When the user makes corrections or additions ("the kitchen is 4m x 3m", "add 2 downlights in bathroom"),
+2. When the user makes corrections or additions ("the kitchen is 4m x 3m", "add corridor 6m²"),
    update the context pack markdown accordingly and return the full updated version.
 3. When the user asks you to clarify, expand, or restructure the markdown for copy-pasting into AI Fill,
    do so and return the updated markdown.
-4. When you only answer a question without modifying data, set updated_markdown to null.
+4. When you only answer a question without modifying data, set updated_markdown and room_patches to null.
 
 Rules:
 - Do NOT invent data not present in the original documents or stated by the user.
 - Keep the markdown structure (headers, tables, bullet lists) consistent.
 - Be concise in your assistant_message — one to three sentences.
+- Whenever you add or update room dimensions, populate room_patches with ONLY the changed/added rooms.
+  Each patch must include name and at least one of: width_m, length_m, area_m2 (use null for unknown).
+  floor_level is optional — omit if unchanged or unknown.
 
 Return ONLY valid JSON, no markdown fences:
 {
   "assistant_message": "Done — I've updated the kitchen dimensions to 4.0m × 3.0m.",
-  "updated_markdown": "# Project Context Pack\\n..." | null
+  "updated_markdown": "..." | null,
+  "room_patches": [{"name": "Kitchen", "floor_level": "Ground Floor", "width_m": 4.0, "length_m": 3.0, "area_m2": 12.0}] | null
 }
 """
 
@@ -45,7 +49,7 @@ _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
 
 def _parse_json(content: str) -> dict:
-    fallback = {"assistant_message": content.strip(), "updated_markdown": None}
+    fallback = {"assistant_message": content.strip(), "updated_markdown": None, "room_patches": None}
     for candidate in [
         content,
         _FENCE_OPEN.sub("", content.strip(), count=1),
