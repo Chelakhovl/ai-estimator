@@ -52,6 +52,8 @@ class EnrichPageResponse(BaseModel):
     used_vision: bool
     fallback_reason: str | None = None
     usage: dict[str, int] | None = None
+    document_subtype: str = "other"
+    classification_confidence: float = 0.0
 
 
 def _coerce_rooms(raw: list) -> list[EnrichedRoom]:
@@ -196,4 +198,6 @@ def enrich_page(
         used_vision=raw.get("used_vision", False),
         fallback_reason=raw.get("fallback_reason"),
         usage=raw.get("usage"),
+        document_subtype=raw.get("document_subtype", "other"),
+        classification_confidence=raw.get("classification_confidence", 0.0),
     )

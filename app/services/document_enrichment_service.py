@@ -414,6 +414,8 @@ def enrich_page_with_vision(
         data["fallback_reason"] = None
         data["usage"] = usage
         data.setdefault("description", "")
+        data["document_subtype"] = data.get("page_type", "other")
+        data["classification_confidence"] = 0.85
         return data
 
     except Exception as exc:
