@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.corrections import router as corrections_router
 from app.api.custom_work import router as custom_work_router
 from app.api.document_analysis import router as document_analysis_router
 from app.api.health import router as health_router
@@ -47,6 +48,7 @@ app = FastAPI(
     description="AI preview service for Combit Estimator Power Platform integration.",
     lifespan=lifespan,
 )
+app.include_router(corrections_router)
 app.include_router(custom_work_router)
 app.include_router(document_analysis_router)
 app.include_router(health_router)

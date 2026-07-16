@@ -7,6 +7,7 @@ import re
 from app.config import settings
 from app.schemas import (
     CandidateRow,
+    CustomPricedRow,
     PreviewAssumption,
     PreviewCoveragePrompt,
     PreviewCoverageSummary,
@@ -1373,6 +1374,11 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
 
+    custom_priced_rows: list[CustomPricedRow] = []
+    if unmatched_items and request.catalog_context:
+        from app.services.custom_work_service import batch_price_unmatched
+        custom_priced_rows = batch_price_unmatched(unmatched_items, request.catalog_context)
+
     return PreviewResponse(
         summary_text=summary_text,
         service_mode="mock",
@@ -1382,6 +1388,7 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
         ),
         matched_rows=matched_rows,
         unmatched_items=unmatched_items,
+        custom_priced_rows=custom_priced_rows,
         assumptions=assumptions,
         review_queue=review_queue,
         coverage_prompts=coverage_prompts,
@@ -1662,6 +1669,11 @@ def _generate_llm_preview(
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
 
+    custom_priced_rows: list[CustomPricedRow] = []
+    if unmatched_items and request.catalog_context:
+        from app.services.custom_work_service import batch_price_unmatched
+        custom_priced_rows = batch_price_unmatched(unmatched_items, request.catalog_context)
+
     return PreviewResponse(
         summary_text=summary_text,
         service_mode="llm",
@@ -1671,6 +1683,7 @@ def _generate_llm_preview(
         ),
         matched_rows=matched_rows,
         unmatched_items=unmatched_items,
+        custom_priced_rows=custom_priced_rows,
         assumptions=assumptions,
         review_queue=review_queue,
         coverage_prompts=coverage_prompts,

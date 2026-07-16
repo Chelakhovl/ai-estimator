@@ -9,6 +9,7 @@ from app.security import require_api_key
 from app.services.document_chat_service import chat_about_document
 from app.services.document_enrichment_service import enrich_page_with_vision
 from app.services.document_synthesis_service import synthesize_document_to_markdown
+from app.services.scope_from_pack_service import generate_scope_from_context_pack
 
 router = APIRouter(prefix="/v1/document-analysis", tags=["document-analysis"])
 
@@ -168,6 +169,37 @@ def synthesize(
     )
     return SynthesizeResponse(
         markdown=result.get("markdown", ""),
+        model_name=result.get("model_name", ""),
+        usage=result.get("usage"),
+    )
+
+
+class GenerateScopeRequest(BaseModel):
+    context_pack_json: dict
+
+
+class ScopeSection(BaseModel):
+    key: str
+    title: str
+    lines: list[str]
+
+
+class GenerateScopeResponse(BaseModel):
+    scope_text: str
+    sections: list[ScopeSection] = []
+    model_name: str
+    usage: dict[str, int] | None = None
+
+
+@router.post("/generate-scope", response_model=GenerateScopeResponse)
+def generate_scope(
+    payload: GenerateScopeRequest,
+    _authorized: Annotated[None, Depends(require_api_key)],
+) -> GenerateScopeResponse:
+    result = generate_scope_from_context_pack(payload.context_pack_json)
+    return GenerateScopeResponse(
+        scope_text=result.get("scope_text", ""),
+        sections=[ScopeSection(**s) for s in result.get("sections", []) if isinstance(s, dict)],
         model_name=result.get("model_name", ""),
         usage=result.get("usage"),
     )

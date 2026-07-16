@@ -58,6 +58,7 @@ class PreviewRequest(BaseModel):
     document_context: str | None = (
         None  # AI-synthesized project context from Document Analysis
     )
+    catalog_context: "CatalogContext | None" = None  # enables batch-pricing of unmatched items
 
 
 class ScopeExtractionRequest(BaseModel):
@@ -228,25 +229,25 @@ class ExtractedRoomTakeoff(BaseModel):
     estimated_skirting_lm: float = Field(ge=0)
     estimated_wall_tiling_area_m2: float = Field(ge=0)
     estimated_floor_finish_area_m2: float = Field(ge=0)
-    estimated_plumbing_points: float = Field(ge=0)
-    estimated_wc_count: float = Field(ge=0)
-    estimated_basin_count: float = Field(ge=0)
-    estimated_bath_count: float = Field(ge=0)
-    estimated_shower_count: float = Field(ge=0)
-    estimated_sink_count: float = Field(ge=0)
-    estimated_sanitary_set_count: float = Field(ge=0)
-    estimated_vanity_unit_count: float = Field(ge=0)
-    estimated_concealed_cistern_count: float = Field(ge=0)
-    estimated_appliance_connection_count: float = Field(ge=0)
-    estimated_socket_count: float = Field(ge=0)
-    estimated_switch_count: float = Field(ge=0)
-    estimated_lighting_point_count: float = Field(ge=0)
-    estimated_downlight_count: float = Field(ge=0)
-    estimated_extractor_fan_count: float = Field(ge=0)
-    estimated_ducted_extractor_count: float = Field(ge=0)
-    estimated_hardwired_appliance_count: float = Field(ge=0)
-    estimated_electrical_second_fix_points: float = Field(ge=0)
-    estimated_plumbing_second_fix_points: float = Field(ge=0)
+    estimated_plumbing_points: float = Field(ge=0, default=0)
+    estimated_wc_count: float = Field(ge=0, default=0)
+    estimated_basin_count: float = Field(ge=0, default=0)
+    estimated_bath_count: float = Field(ge=0, default=0)
+    estimated_shower_count: float = Field(ge=0, default=0)
+    estimated_sink_count: float = Field(ge=0, default=0)
+    estimated_sanitary_set_count: float = Field(ge=0, default=0)
+    estimated_vanity_unit_count: float = Field(ge=0, default=0)
+    estimated_concealed_cistern_count: float = Field(ge=0, default=0)
+    estimated_appliance_connection_count: float = Field(ge=0, default=0)
+    estimated_socket_count: float = Field(ge=0, default=0)
+    estimated_switch_count: float = Field(ge=0, default=0)
+    estimated_lighting_point_count: float = Field(ge=0, default=0)
+    estimated_downlight_count: float = Field(ge=0, default=0)
+    estimated_extractor_fan_count: float = Field(ge=0, default=0)
+    estimated_ducted_extractor_count: float = Field(ge=0, default=0)
+    estimated_hardwired_appliance_count: float = Field(ge=0, default=0)
+    estimated_electrical_second_fix_points: float = Field(ge=0, default=0)
+    estimated_plumbing_second_fix_points: float = Field(ge=0, default=0)
 
 
 class ExtractedCountItem(BaseModel):
@@ -439,6 +440,48 @@ class PreviewCoverageSummary(BaseModel):
     normalized_scope_used: bool = False
 
 
+class CustomPricedRow(BaseModel):
+    """An unmatched scope item that was auto-priced via batch GPT call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_text: str  # original unmatched item description
+    name: str
+    unit: str
+    labour_cost: float
+    material_cost: float
+    other_cost: float
+    work_days: float
+    qty_for_norm: float
+    suggested_work_group_id: int | None = None
+    suggested_work_group_name: str = ""
+    market_justification: str = ""
+    price_source_notes: str = ""
+    confidence_level: float = 0.0
+
+
+class LLMBatchPricedItem(BaseModel):
+    """One item in the batch pricing GPT output."""
+
+    source_text: str
+    name: str
+    unit: str
+    labour_cost: float = Field(ge=0)
+    material_cost: float = Field(ge=0)
+    other_cost: float = Field(ge=0)
+    work_days: float = Field(ge=0)
+    qty_for_norm: float = Field(gt=0, default=1.0)
+    suggested_work_group_id: int | None = None
+    suggested_work_group_name: str = ""
+    market_justification: str = ""
+    price_source_notes: str = ""
+    confidence_level: float = Field(ge=0, le=1, default=0.7)
+
+
+class LLMBatchPriceOutput(BaseModel):
+    items: list[LLMBatchPricedItem]
+
+
 class PreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -448,6 +491,7 @@ class PreviewResponse(BaseModel):
     review_summary: PreviewReviewSummary
     matched_rows: list[PreviewMatchedRow]
     unmatched_items: list[PreviewUnmatchedItem]
+    custom_priced_rows: list[CustomPricedRow] = Field(default_factory=list)
     assumptions: list[PreviewAssumption]
     review_queue: list[PreviewReviewQueueItem] = Field(default_factory=list)
     coverage_prompts: list[PreviewCoveragePrompt] = Field(default_factory=list)
@@ -739,3 +783,54 @@ class LLMCustomWorkOutput(BaseModel):
     status: str  # "chatting" | "proposing"
     work_proposal: CustomWorkProposal | None = None
     handoff_readiness: bool = False
+
+
+# ── Batch Corrections ────────────────────────────────────────────────────────
+
+
+class ItemContext(BaseModel):
+    """A current quote item provided as context for the AI corrections parser."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    ref: str  # excel ref code, e.g. "1.1.4"
+    display_index: int  # 1-based position in quote
+    name: str  # effective display name
+    area: str
+    quantity: str
+
+
+class BatchCorrectionsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    items: list[ItemContext]
+
+
+class CorrectionPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: int
+    ref: str
+    name: str  # current item name (for UI diff display)
+    field: str  # which field is being changed
+    old_value: str
+    new_value: str
+
+
+class BatchCorrectionsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    patches: list[CorrectionPatch]
+    unresolved: list[str]  # correction clauses the AI could not map to any item
+    service_mode: str  # "real" | "mock"
+
+
+class LLMBatchCorrectionsOutput(BaseModel):
+    """Internal structured output model for the corrections parser — not exposed in API."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    patches: list[CorrectionPatch]
+    unresolved: list[str]

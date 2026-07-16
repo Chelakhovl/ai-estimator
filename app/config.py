@@ -39,7 +39,7 @@ def get_settings() -> Settings:
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         openai_model=os.getenv("OPENAI_MODEL", ""),
         openai_intake_model=os.getenv("OPENAI_INTAKE_MODEL", "gpt-4o"),
-        openai_intake_fast_model=os.getenv("OPENAI_INTAKE_FAST_MODEL", "gpt-4o-mini"),
+        openai_intake_fast_model=os.getenv("OPENAI_INTAKE_FAST_MODEL", "gpt-4o"),
         openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "45")),
         openai_request_max_attempts=max(
             int(os.getenv("OPENAI_REQUEST_MAX_ATTEMPTS", "2")), 1

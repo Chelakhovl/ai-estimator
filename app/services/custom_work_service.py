@@ -6,9 +6,12 @@ from typing import TYPE_CHECKING
 from app.config import settings
 from app.schemas import (
     CatalogContext,
+    CustomPricedRow,
     CustomWorkChatRequest,
     CustomWorkChatResponse,
+    LLMBatchPriceOutput,
     LLMCustomWorkOutput,
+    PreviewUnmatchedItem,
 )
 
 if TYPE_CHECKING:
@@ -117,6 +120,91 @@ class CustomWorkLLMClient:
             "latency_ms": int((perf_counter() - started_at) * 1000),
         }
         return parsed
+
+
+def _build_batch_price_system_prompt(catalog_context: CatalogContext) -> str:
+    work_groups_text = "\n".join(f"  {wg.id}: {wg.name}" for wg in catalog_context.work_groups)
+    labour_rates_text = "\n".join(
+        f"  {lr.name} ({lr.code}): £{lr.net_rate:.2f}/hr" for lr in catalog_context.labour_rates
+    )
+    return f"""You are a UK construction estimating AI for Combit Renovations Ltd, a London refurbishment contractor.
+
+You will receive a list of work items that could not be matched to the existing catalogue. Price each one immediately — do NOT ask clarifying questions.
+
+AVAILABLE WORK GROUPS (use the integer id in suggested_work_group_id):
+{work_groups_text}
+
+LABOUR RATES (net cost to contractor, ex markup, ex VAT):
+{labour_rates_text}
+
+PRICING RULES:
+- All costs are NET to contractor, ex VAT, ex profit/overhead markup.
+- Use 2024-2025 London / South-East England market rates.
+- labour_cost = labour net cost for qty_for_norm units.
+- material_cost = net material cost for qty_for_norm units.
+- other_cost = subcontract, plant hire, or fixed costs.
+- qty_for_norm: normalisation basis (1.0 for per-unit rates).
+- unit must be one of: m2, lm, m3, each, nr.
+- work_days: elapsed working days for a typical team.
+- Never include VAT, profit, or overhead markups.
+- confidence_level: 0.85+ for standard items, 0.65 for specialist/complex, 0.5 for speculative.
+- source_text: copy the original item description exactly as given.
+- Pick the most appropriate suggested_work_group_id from the list above.
+
+Return a JSON object with an "items" array containing one priced entry per input item."""
+
+
+def batch_price_unmatched(
+    items: list[PreviewUnmatchedItem],
+    catalog_context: CatalogContext,
+) -> list[CustomPricedRow]:
+    """Single GPT call to price all unmatched items. Returns [] on any error."""
+    if not items:
+        return []
+    client = CustomWorkLLMClient()
+    if not client.is_enabled():
+        return []
+    items_text = "\n".join(f"{i + 1}. {item.source_text}" for i, item in enumerate(items))
+    messages = [
+        {"role": "system", "content": _build_batch_price_system_prompt(catalog_context)},
+        {"role": "user", "content": f"Price the following work items:\n\n{items_text}"},
+    ]
+    try:
+        started_at = perf_counter()
+        response = client.client.beta.chat.completions.parse(  # type: ignore[union-attr]
+            model=client.model,
+            messages=messages,
+            response_format=LLMBatchPriceOutput,
+        )
+        parsed: LLMBatchPriceOutput | None = response.choices[0].message.parsed
+        if parsed is None:
+            return []
+        elapsed = int((perf_counter() - started_at) * 1000)
+        import logging
+        logging.getLogger(__name__).info(
+            "batch_price_unmatched: priced %d items in %dms", len(parsed.items), elapsed
+        )
+        return [
+            CustomPricedRow(
+                source_text=item.source_text,
+                name=item.name,
+                unit=item.unit,
+                labour_cost=item.labour_cost,
+                material_cost=item.material_cost,
+                other_cost=item.other_cost,
+                work_days=item.work_days,
+                qty_for_norm=item.qty_for_norm,
+                suggested_work_group_id=item.suggested_work_group_id,
+                suggested_work_group_name=item.suggested_work_group_name,
+                market_justification=item.market_justification,
+                price_source_notes=item.price_source_notes,
+                confidence_level=item.confidence_level,
+            )
+            for item in parsed.items
+        ]
+    except Exception:
+        logging.getLogger(__name__).exception("batch_price_unmatched failed")
+        return []
 
 
 def chat_custom_work(payload: CustomWorkChatRequest) -> CustomWorkChatResponse:
