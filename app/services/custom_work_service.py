@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from time import perf_counter
 from typing import TYPE_CHECKING
 
@@ -180,7 +181,6 @@ def batch_price_unmatched(
         if parsed is None:
             return []
         elapsed = int((perf_counter() - started_at) * 1000)
-        import logging
         logging.getLogger(__name__).info(
             "batch_price_unmatched: priced %d items in %dms", len(parsed.items), elapsed
         )

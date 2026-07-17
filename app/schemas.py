@@ -704,6 +704,7 @@ class LLMIntakeFinalizeOutput(BaseModel):
     structured_scope_markdown: str
     final_missing_items: list[str] = Field(default_factory=list)
     final_warnings: list[str] = Field(default_factory=list)
+    handoff_readiness: bool = False
 
 
 # ---------------------------------------------------------------------------
