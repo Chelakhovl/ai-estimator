@@ -14,9 +14,17 @@ from app.schemas import (
     LLMCustomWorkOutput,
     PreviewUnmatchedItem,
 )
+from app.services.retry import call_with_request_retries
 
 if TYPE_CHECKING:
     from openai import OpenAI
+
+
+class CustomPricingUnavailable(Exception):
+    """Raised when batch_price_unmatched could not get a usable priced result
+    (timeout, malformed output, rate limit) — distinct from "nothing to price",
+    which returns an empty list normally, not this exception."""
+
 
 _MOCK_RESPONSE = CustomWorkChatResponse(
     message=(
@@ -159,7 +167,12 @@ def batch_price_unmatched(
     items: list[PreviewUnmatchedItem],
     catalog_context: CatalogContext,
 ) -> list[CustomPricedRow]:
-    """Single GPT call to price all unmatched items. Returns [] on any error."""
+    """Single GPT call to price all unmatched items.
+
+    Returns [] when there's legitimately nothing to price (no items, or custom
+    pricing disabled). Raises CustomPricingUnavailable on a real failure
+    (timeout, malformed output, rate limit) so the caller can tell the two
+    apart and surface a warning instead of silently returning no rows."""
     if not items:
         return []
     client = CustomWorkLLMClient()
@@ -172,14 +185,17 @@ def batch_price_unmatched(
     ]
     try:
         started_at = perf_counter()
-        response = client.client.beta.chat.completions.parse(  # type: ignore[union-attr]
-            model=client.model,
-            messages=messages,
-            response_format=LLMBatchPriceOutput,
+        response = call_with_request_retries(
+            lambda: client.client.beta.chat.completions.parse(  # type: ignore[union-attr]
+                model=client.model,
+                messages=messages,
+                response_format=LLMBatchPriceOutput,
+            ),
+            label="batch_price_unmatched",
         )
         parsed: LLMBatchPriceOutput | None = response.choices[0].message.parsed
         if parsed is None:
-            return []
+            raise CustomPricingUnavailable("Model returned no structured output.")
         elapsed = int((perf_counter() - started_at) * 1000)
         logging.getLogger(__name__).info(
             "batch_price_unmatched: priced %d items in %dms", len(parsed.items), elapsed
@@ -202,9 +218,12 @@ def batch_price_unmatched(
             )
             for item in parsed.items
         ]
-    except Exception:
+    except CustomPricingUnavailable:
         logging.getLogger(__name__).exception("batch_price_unmatched failed")
-        return []
+        raise
+    except Exception as exc:
+        logging.getLogger(__name__).exception("batch_price_unmatched failed")
+        raise CustomPricingUnavailable(str(exc)) from exc
 
 
 def chat_custom_work(payload: CustomWorkChatRequest) -> CustomWorkChatResponse:

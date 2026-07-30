@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.schemas import (
@@ -19,6 +20,7 @@ from app.schemas import (
 )
 from app.services import custom_work_service
 from app.services.custom_work_service import (
+    CustomPricingUnavailable,
     CustomWorkLLMClient,
     _build_batch_price_system_prompt,
     _build_messages,
@@ -208,7 +210,7 @@ class TestBatchPriceUnmatched:
         assert row.material_cost == 80.0
         assert row.confidence_level == 0.8
 
-    def test_returns_empty_list_when_parsed_is_none(self):
+    def test_raises_custom_pricing_unavailable_when_parsed_is_none(self):
         items = [PreviewUnmatchedItem(source_text="Fit new bespoke shelving", reason="no match")]
         fake_response = MagicMock()
         fake_response.choices[0].message.parsed = None
@@ -218,11 +220,10 @@ class TestBatchPriceUnmatched:
         with patch.object(
             custom_work_service, "settings", FakeSettings(openai_api_key="sk-test", openai_intake_model="gpt-4o")
         ), patch("openai.OpenAI", return_value=fake_client):
-            result = batch_price_unmatched(items, _catalog_context())
+            with pytest.raises(CustomPricingUnavailable):
+                batch_price_unmatched(items, _catalog_context())
 
-        assert result == []
-
-    def test_returns_empty_list_when_llm_call_raises(self):
+    def test_raises_custom_pricing_unavailable_when_llm_call_raises(self):
         items = [PreviewUnmatchedItem(source_text="Fit new bespoke shelving", reason="no match")]
         fake_client = MagicMock()
         fake_client.beta.chat.completions.parse.side_effect = RuntimeError("network unreachable")
@@ -230,9 +231,8 @@ class TestBatchPriceUnmatched:
         with patch.object(
             custom_work_service, "settings", FakeSettings(openai_api_key="sk-test", openai_intake_model="gpt-4o")
         ), patch("openai.OpenAI", return_value=fake_client):
-            result = batch_price_unmatched(items, _catalog_context())
-
-        assert result == []
+            with pytest.raises(CustomPricingUnavailable):
+                batch_price_unmatched(items, _catalog_context())
 
 
 class TestChatCustomWork:

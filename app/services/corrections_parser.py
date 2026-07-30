@@ -13,6 +13,7 @@ from app.schemas import (
     ItemContext,
     LLMBatchCorrectionsOutput,
 )
+from app.services.retry import call_with_request_retries
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -46,6 +47,32 @@ _DISPLAY_MODE_ALIASES = {
     "included": "included",
     "include": "included",
 }
+
+
+def _validate_and_normalize_patches(
+    patches: list[CorrectionPatch], unresolved: list[str]
+) -> tuple[list[CorrectionPatch], list[str]]:
+    """Guard against the model returning a field name outside the documented
+    set, or a display_mode value that isn't one of the five canonical enum
+    values — either would otherwise flow straight into the bulk-update API."""
+    valid_patches: list[CorrectionPatch] = []
+    extra_unresolved: list[str] = []
+
+    for patch in patches:
+        if patch.field not in _FIELD_DISPLAY:
+            extra_unresolved.append(f"{patch.ref} — unrecognised field '{patch.field}': {patch.new_value}")
+            continue
+
+        if patch.field == "display_mode":
+            normalized = _DISPLAY_MODE_ALIASES.get(patch.new_value.strip().lower())
+            if normalized is None:
+                extra_unresolved.append(f"{patch.ref} — unrecognised display mode '{patch.new_value}'")
+                continue
+            patch.new_value = normalized
+
+        valid_patches.append(patch)
+
+    return valid_patches, [*unresolved, *extra_unresolved]
 
 
 def _build_system_prompt() -> str:
@@ -161,9 +188,58 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
             )
             matched = True
 
+        # Profit: "profit to 15%", "margin = 12.5%"
+        profit_match = re.search(r"(?:profit|margin)[^\d]*(\d+(?:\.\d+)?)\s*%?", clause, re.IGNORECASE)
+        if profit_match:
+            patches.append(
+                CorrectionPatch(
+                    item_id=item.id,
+                    ref=item.ref,
+                    name=item.name,
+                    field="profit",
+                    old_value="",
+                    new_value=f"{float(profit_match.group(1)):.2f}",
+                )
+            )
+            matched = True
+
+        # Display mode: "mark as excluded", "set to by arrangement", "display as pc sum"
+        alias_pattern = "|".join(re.escape(alias) for alias in sorted(_DISPLAY_MODE_ALIASES, key=len, reverse=True))
+        mode_match = re.search(
+            rf"(?:mark as|set to|display as|display_mode)\s*[:\-]?\s*({alias_pattern})\b", clause, re.IGNORECASE
+        )
+        if mode_match:
+            patches.append(
+                CorrectionPatch(
+                    item_id=item.id,
+                    ref=item.ref,
+                    name=item.name,
+                    field="display_mode",
+                    old_value="",
+                    new_value=_DISPLAY_MODE_ALIASES[mode_match.group(1).lower()],
+                )
+            )
+            matched = True
+
+        # Internal note: "note: check with client", "internal note - confirm spec"
+        note_match = re.search(r"(?:internal\s+note|note)\s*[:\-]\s*(.+)", clause, re.IGNORECASE)
+        if note_match:
+            patches.append(
+                CorrectionPatch(
+                    item_id=item.id,
+                    ref=item.ref,
+                    name=item.name,
+                    field="internal_note",
+                    old_value="",
+                    new_value=note_match.group(1).strip(),
+                )
+            )
+            matched = True
+
         if not matched:
             unresolved.append(clause)
 
+    patches, unresolved = _validate_and_normalize_patches(patches, unresolved)
     return BatchCorrectionsResponse(patches=patches, unresolved=unresolved, service_mode="mock")
 
 
@@ -173,7 +249,7 @@ def _llm_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
     client = OpenAI(
         api_key=settings.openai_api_key,
         timeout=settings.openai_timeout_seconds,
-        max_retries=2,
+        max_retries=3,
     )
     model = settings.openai_model
 
@@ -182,8 +258,7 @@ def _llm_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
         {"role": "user", "content": _build_user_message(request)},
     ]
 
-    started_at = perf_counter()
-    try:
+    def _call_llm() -> LLMBatchCorrectionsOutput | None:
         # Try responses.parse (newer SDK)
         responses_api = getattr(client, "responses", None)
         if callable(getattr(responses_api, "parse", None)):
@@ -193,28 +268,32 @@ def _llm_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
                 text_format=LLMBatchCorrectionsOutput,
                 temperature=0,
             )
-            parsed: LLMBatchCorrectionsOutput | None = getattr(response, "output_parsed", None)
-        else:
-            response = client.beta.chat.completions.parse(
-                model=model,
-                messages=messages,
-                response_format=LLMBatchCorrectionsOutput,
-                temperature=0,
-            )
-            parsed = response.choices[0].message.parsed if response.choices else None
+            return getattr(response, "output_parsed", None)
+        response = client.beta.chat.completions.parse(
+            model=model,
+            messages=messages,
+            response_format=LLMBatchCorrectionsOutput,
+            temperature=0,
+        )
+        return response.choices[0].message.parsed if response.choices else None
+
+    started_at = perf_counter()
+    try:
+        parsed = call_with_request_retries(_call_llm, label="batch_corrections LLM parse")
 
         if parsed is None:
             raise ValueError("Model returned no structured output.")
 
+        valid_patches, unresolved = _validate_and_normalize_patches(parsed.patches, parsed.unresolved)
         logger.info(
             "batch_corrections LLM parse completed in %sms, %d patches, %d unresolved",
             int((perf_counter() - started_at) * 1000),
-            len(parsed.patches),
-            len(parsed.unresolved),
+            len(valid_patches),
+            len(unresolved),
         )
         return BatchCorrectionsResponse(
-            patches=parsed.patches,
-            unresolved=parsed.unresolved,
+            patches=valid_patches,
+            unresolved=unresolved,
             service_mode="real",
         )
 

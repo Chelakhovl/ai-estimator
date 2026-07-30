@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.schemas import BatchCorrectionsRequest, ItemContext
+from app.schemas import BatchCorrectionsRequest, CorrectionPatch, ItemContext
 from app.services import corrections_parser
-from app.services.corrections_parser import _mock_parse, parse_batch_corrections
+from app.services.corrections_parser import _mock_parse, _validate_and_normalize_patches, parse_batch_corrections
 
 
 def _items() -> list[ItemContext]:
@@ -101,6 +101,74 @@ class TestMockParse:
         assert result.patches == []
         assert result.unresolved == []
 
+    def test_matches_profit_percentage(self):
+        request = BatchCorrectionsRequest(text="1.1.4 profit to 15%", items=_items())
+        result = _mock_parse(request)
+
+        assert len(result.patches) == 1
+        assert result.patches[0].field == "profit"
+        assert result.patches[0].new_value == "15.00"
+
+    def test_matches_display_mode_shorthand(self):
+        request = BatchCorrectionsRequest(text="1.1.4 mark as ba", items=_items())
+        result = _mock_parse(request)
+
+        assert len(result.patches) == 1
+        assert result.patches[0].field == "display_mode"
+        assert result.patches[0].new_value == "by_arrangement"
+
+    def test_matches_internal_note(self):
+        request = BatchCorrectionsRequest(text="1.1.4 note: confirm with client", items=_items())
+        result = _mock_parse(request)
+
+        assert len(result.patches) == 1
+        assert result.patches[0].field == "internal_note"
+        assert result.patches[0].new_value == "confirm with client"
+
+
+class TestValidateAndNormalizePatches:
+    def test_unrecognised_field_is_moved_to_unresolved(self):
+        patches = [
+            CorrectionPatch(
+                item_id=1, ref="1.1.4", name="Strip out kitchen", field="not_a_real_field", old_value="", new_value="x"
+            )
+        ]
+        valid, unresolved = _validate_and_normalize_patches(patches, [])
+
+        assert valid == []
+        assert len(unresolved) == 1
+        assert "not_a_real_field" in unresolved[0]
+
+    def test_unrecognised_display_mode_value_is_moved_to_unresolved(self):
+        patches = [
+            CorrectionPatch(
+                item_id=1, ref="1.1.4", name="Strip out kitchen", field="display_mode", old_value="", new_value="gibberish"
+            )
+        ]
+        valid, unresolved = _validate_and_normalize_patches(patches, [])
+
+        assert valid == []
+        assert len(unresolved) == 1
+
+    def test_display_mode_shorthand_is_normalized_to_canonical_value(self):
+        patches = [
+            CorrectionPatch(item_id=1, ref="1.1.4", name="Strip out kitchen", field="display_mode", old_value="", new_value="PC")
+        ]
+        valid, unresolved = _validate_and_normalize_patches(patches, [])
+
+        assert unresolved == []
+        assert len(valid) == 1
+        assert valid[0].new_value == "pc_sum"
+
+    def test_valid_non_display_mode_patch_passes_through_unchanged(self):
+        patches = [
+            CorrectionPatch(item_id=1, ref="1.1.4", name="Strip out kitchen", field="area", old_value="90m²", new_value="94m²")
+        ]
+        valid, unresolved = _validate_and_normalize_patches(patches, ["some unrelated clause"])
+
+        assert unresolved == ["some unrelated clause"]
+        assert valid == patches
+
 
 class TestParseBatchCorrectionsDispatch:
     def test_uses_mock_when_openai_not_configured(self):
@@ -146,6 +214,34 @@ class TestParseBatchCorrectionsDispatch:
         assert result.service_mode == "real"
         assert result.unresolved == ["some unresolved clause"]
         fake_client.responses.parse.assert_called_once()
+
+    def test_llm_output_with_invalid_field_is_filtered_before_returning(self):
+        bad_patch = CorrectionPatch(
+            item_id=1, ref="1.1.4", name="Strip out kitchen", field="not_a_real_field", old_value="", new_value="x"
+        )
+        good_patch = CorrectionPatch(
+            item_id=2, ref="1.1.6", name="Fix new kitchen units", field="area", old_value="", new_value="10m²"
+        )
+        parsed_message = MagicMock()
+        parsed_message.patches = [bad_patch, good_patch]
+        parsed_message.unresolved = []
+
+        fake_response = MagicMock()
+        fake_response.output_parsed = parsed_message
+
+        fake_client = MagicMock()
+        fake_client.responses.parse.return_value = fake_response
+
+        with patch.object(
+            corrections_parser, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
+        ), patch("openai.OpenAI", return_value=fake_client):
+            request = BatchCorrectionsRequest(text="anything", items=_items())
+            result = parse_batch_corrections(request)
+
+        assert result.service_mode == "real"
+        assert result.patches == [good_patch]
+        assert len(result.unresolved) == 1
+        assert "not_a_real_field" in result.unresolved[0]
 
 
 class TestCorrectionsApi:

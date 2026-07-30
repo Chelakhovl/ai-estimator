@@ -7,6 +7,7 @@ import re
 from app.config import settings
 from app.schemas import (
     CandidateRow,
+    CatalogContext,
     CustomPricedRow,
     PreviewAssumption,
     PreviewCoveragePrompt,
@@ -932,6 +933,34 @@ def _resolve_preview_input(request: PreviewRequest) -> tuple[str, object | None,
     return request.prompt, extracted_scope, "raw"
 
 
+def _price_unmatched_items_safely(
+    unmatched_items: list[PreviewUnmatchedItem],
+    catalog_context: CatalogContext | None,
+    assumptions: list[PreviewAssumption],
+) -> list[CustomPricedRow]:
+    """Wraps batch_price_unmatched so a real failure (timeout, malformed
+    output) surfaces as a visible assumption instead of looking identical to
+    "nothing needed custom pricing"."""
+    if not (unmatched_items and catalog_context):
+        return []
+    from app.services.custom_work_service import CustomPricingUnavailable, batch_price_unmatched
+
+    try:
+        return batch_price_unmatched(unmatched_items, catalog_context)
+    except CustomPricingUnavailable:
+        assumptions.append(
+            PreviewAssumption(
+                text=(
+                    f"Custom pricing could not be generated for {len(unmatched_items)} unmatched "
+                    "item(s) — AI pricing was unavailable. Price these manually or retry."
+                ),
+                kind="custom_pricing_failed",
+                severity="warning",
+            )
+        )
+        return []
+
+
 def _build_response_warnings(
     assumptions: list[PreviewAssumption], *, extra_messages: list[str] | None = None
 ) -> list[str]:
@@ -1371,13 +1400,11 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
     assumptions.extend(
         build_scope_coverage_assumptions(source_prompt, matched_rows, extracted_scope)
     )
+    custom_priced_rows = _price_unmatched_items_safely(
+        unmatched_items, request.catalog_context, assumptions
+    )
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
-
-    custom_priced_rows: list[CustomPricedRow] = []
-    if unmatched_items and request.catalog_context:
-        from app.services.custom_work_service import batch_price_unmatched
-        custom_priced_rows = batch_price_unmatched(unmatched_items, request.catalog_context)
 
     return PreviewResponse(
         summary_text=summary_text,
@@ -1666,13 +1693,11 @@ def _generate_llm_preview(
     assumptions.extend(
         build_scope_coverage_assumptions(source_prompt, matched_rows, extracted_scope)
     )
+    custom_priced_rows = _price_unmatched_items_safely(
+        unmatched_items, request.catalog_context, assumptions
+    )
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
-
-    custom_priced_rows: list[CustomPricedRow] = []
-    if unmatched_items and request.catalog_context:
-        from app.services.custom_work_service import batch_price_unmatched
-        custom_priced_rows = batch_price_unmatched(unmatched_items, request.catalog_context)
 
     return PreviewResponse(
         summary_text=summary_text,
