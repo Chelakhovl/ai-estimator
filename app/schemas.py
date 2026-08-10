@@ -832,10 +832,28 @@ class BatchCorrectionsResponse(BaseModel):
     service_mode: str  # "real" | "mock"
 
 
+class LLMCorrectionPatch(BaseModel):
+    """What the model actually returns for one patch. The model only ever sees the
+    '#' (display_index) column in its input table — never the real database id — so
+    it is asked for display_index here rather than item_id. The real item_id is
+    resolved server-side by looking display_index up against the known item list,
+    which also lets us safely reject an out-of-range index instead of passing an
+    unverified id straight into the bulk-update API."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_index: int
+    ref: str
+    name: str
+    field: str
+    old_value: str
+    new_value: str
+
+
 class LLMBatchCorrectionsOutput(BaseModel):
     """Internal structured output model for the corrections parser — not exposed in API."""
 
     model_config = ConfigDict(extra="forbid")
 
-    patches: list[CorrectionPatch]
+    patches: list[LLMCorrectionPatch]
     unresolved: list[str]

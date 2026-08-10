@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 from time import perf_counter
-from typing import TYPE_CHECKING
 
 from app.config import settings
 from app.schemas import (
@@ -12,11 +11,9 @@ from app.schemas import (
     CorrectionPatch,
     ItemContext,
     LLMBatchCorrectionsOutput,
+    LLMCorrectionPatch,
 )
 from app.services.retry import call_with_request_retries
-
-if TYPE_CHECKING:
-    from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +46,38 @@ _DISPLAY_MODE_ALIASES = {
 }
 
 
+def _resolve_llm_patches(
+    llm_patches: list[LLMCorrectionPatch], items: list[ItemContext]
+) -> tuple[list[CorrectionPatch], list[str]]:
+    """Resolve each patch's real database item_id from its display_index, since the
+    model is never shown the real id (only the '#' column) and so cannot return it
+    reliably. An out-of-range display_index is dropped to unresolved rather than
+    ever reaching the bulk-update API with an unverified id."""
+    item_by_index = {item.display_index: item for item in items}
+    resolved: list[CorrectionPatch] = []
+    unresolved: list[str] = []
+
+    for patch in llm_patches:
+        item = item_by_index.get(patch.display_index)
+        if item is None:
+            unresolved.append(
+                f"{patch.ref} — {patch.field}: {patch.new_value} (could not resolve item)"
+            )
+            continue
+        resolved.append(
+            CorrectionPatch(
+                item_id=item.id,
+                ref=patch.ref,
+                name=patch.name,
+                field=patch.field,
+                old_value=patch.old_value,
+                new_value=patch.new_value,
+            )
+        )
+
+    return resolved, unresolved
+
+
 def _validate_and_normalize_patches(
     patches: list[CorrectionPatch], unresolved: list[str]
 ) -> tuple[list[CorrectionPatch], list[str]]:
@@ -60,13 +89,17 @@ def _validate_and_normalize_patches(
 
     for patch in patches:
         if patch.field not in _FIELD_DISPLAY:
-            extra_unresolved.append(f"{patch.ref} — unrecognised field '{patch.field}': {patch.new_value}")
+            extra_unresolved.append(
+                f"{patch.ref} — unrecognised field '{patch.field}': {patch.new_value}"
+            )
             continue
 
         if patch.field == "display_mode":
             normalized = _DISPLAY_MODE_ALIASES.get(patch.new_value.strip().lower())
             if normalized is None:
-                extra_unresolved.append(f"{patch.ref} — unrecognised display mode '{patch.new_value}'")
+                extra_unresolved.append(
+                    f"{patch.ref} — unrecognised display mode '{patch.new_value}'"
+                )
                 continue
             patch.new_value = normalized
 
@@ -98,7 +131,7 @@ Return a JSON object matching this schema:
 {
   "patches": [
     {
-      "item_id": <int>,
+      "display_index": <int, the "#" column value from the item table>,
       "ref": "<string>",
       "name": "<current item name>",
       "field": "<field name>",
@@ -159,7 +192,9 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
         matched = False
 
         # Area: "change area to 94m²", "area = 94m²", "площадь 94m²"
-        area_match = re.search(r"(?:area|площадь)[^\d]*(\d+(?:\.\d+)?\s*m²?)", clause, re.IGNORECASE)
+        area_match = re.search(
+            r"(?:area|площадь)[^\d]*(\d+(?:\.\d+)?\s*m²?)", clause, re.IGNORECASE
+        )
         if area_match:
             patches.append(
                 CorrectionPatch(
@@ -174,7 +209,9 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
             matched = True
 
         # Quantity: "change qty to 45", "quantity = 45.5"
-        qty_match = re.search(r"(?:qty|quantity|количество)[^\d]*(\d+(?:\.\d+)?)", clause, re.IGNORECASE)
+        qty_match = re.search(
+            r"(?:qty|quantity|количество)[^\d]*(\d+(?:\.\d+)?)", clause, re.IGNORECASE
+        )
         if qty_match:
             patches.append(
                 CorrectionPatch(
@@ -189,7 +226,9 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
             matched = True
 
         # Profit: "profit to 15%", "margin = 12.5%"
-        profit_match = re.search(r"(?:profit|margin)[^\d]*(\d+(?:\.\d+)?)\s*%?", clause, re.IGNORECASE)
+        profit_match = re.search(
+            r"(?:profit|margin)[^\d]*(\d+(?:\.\d+)?)\s*%?", clause, re.IGNORECASE
+        )
         if profit_match:
             patches.append(
                 CorrectionPatch(
@@ -204,9 +243,14 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
             matched = True
 
         # Display mode: "mark as excluded", "set to by arrangement", "display as pc sum"
-        alias_pattern = "|".join(re.escape(alias) for alias in sorted(_DISPLAY_MODE_ALIASES, key=len, reverse=True))
+        alias_pattern = "|".join(
+            re.escape(alias)
+            for alias in sorted(_DISPLAY_MODE_ALIASES, key=len, reverse=True)
+        )
         mode_match = re.search(
-            rf"(?:mark as|set to|display as|display_mode)\s*[:\-]?\s*({alias_pattern})\b", clause, re.IGNORECASE
+            rf"(?:mark as|set to|display as|display_mode)\s*[:\-]?\s*({alias_pattern})\b",
+            clause,
+            re.IGNORECASE,
         )
         if mode_match:
             patches.append(
@@ -222,7 +266,9 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
             matched = True
 
         # Internal note: "note: check with client", "internal note - confirm spec"
-        note_match = re.search(r"(?:internal\s+note|note)\s*[:\-]\s*(.+)", clause, re.IGNORECASE)
+        note_match = re.search(
+            r"(?:internal\s+note|note)\s*[:\-]\s*(.+)", clause, re.IGNORECASE
+        )
         if note_match:
             patches.append(
                 CorrectionPatch(
@@ -240,7 +286,9 @@ def _mock_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
             unresolved.append(clause)
 
     patches, unresolved = _validate_and_normalize_patches(patches, unresolved)
-    return BatchCorrectionsResponse(patches=patches, unresolved=unresolved, service_mode="mock")
+    return BatchCorrectionsResponse(
+        patches=patches, unresolved=unresolved, service_mode="mock"
+    )
 
 
 def _llm_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
@@ -279,12 +327,19 @@ def _llm_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
 
     started_at = perf_counter()
     try:
-        parsed = call_with_request_retries(_call_llm, label="batch_corrections LLM parse")
+        parsed = call_with_request_retries(
+            _call_llm, label="batch_corrections LLM parse"
+        )
 
         if parsed is None:
             raise ValueError("Model returned no structured output.")
 
-        valid_patches, unresolved = _validate_and_normalize_patches(parsed.patches, parsed.unresolved)
+        resolved_patches, resolve_unresolved = _resolve_llm_patches(
+            parsed.patches, request.items
+        )
+        valid_patches, unresolved = _validate_and_normalize_patches(
+            resolved_patches, [*parsed.unresolved, *resolve_unresolved]
+        )
         logger.info(
             "batch_corrections LLM parse completed in %sms, %d patches, %d unresolved",
             int((perf_counter() - started_at) * 1000),
@@ -304,7 +359,9 @@ def _llm_parse(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
         return result
 
 
-def parse_batch_corrections(request: BatchCorrectionsRequest) -> BatchCorrectionsResponse:
+def parse_batch_corrections(
+    request: BatchCorrectionsRequest,
+) -> BatchCorrectionsResponse:
     if not (settings.openai_api_key and settings.openai_model):
         return _mock_parse(request)
     return _llm_parse(request)
