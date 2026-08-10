@@ -21,8 +21,8 @@ from app.schemas import (
     PreviewUnmatchedItem,
 )
 from app.services.calculator import (
-    calculate_client_cost_per_unit,
     calculate_client_total_cost,
+    resolve_client_cost_per_unit,
 )
 from app.services.candidate_shortlist import (
     _extract_active_sections,
@@ -785,7 +785,9 @@ def _build_preview_row_from_candidate(
     matched_section_title: str | None = None,
     matched_section_order: int | None = None,
 ) -> PreviewMatchedRow:
-    client_cost_per_unit = calculate_client_cost_per_unit(
+    client_cost_per_unit = resolve_client_cost_per_unit(
+        is_fixed_rate=row.IsFixedRate,
+        fixed_client_rate=row.FixedClientRate,
         work_labour_cost=row.WorkLabourCost,
         work_mat_cost=row.WorkMatCost,
         work_other_cost=row.WorkOtherCost,
@@ -943,7 +945,10 @@ def _price_unmatched_items_safely(
     "nothing needed custom pricing"."""
     if not (unmatched_items and catalog_context):
         return []
-    from app.services.custom_work_service import CustomPricingUnavailable, batch_price_unmatched
+    from app.services.custom_work_service import (
+        CustomPricingUnavailable,
+        batch_price_unmatched,
+    )
 
     try:
         return batch_price_unmatched(unmatched_items, catalog_context)

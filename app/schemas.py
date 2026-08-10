@@ -29,6 +29,8 @@ class CandidateRow(BaseModel):
     PROFIT: float = 0
     LabourMarkup: float = 0
     MaterialMarkup: float = 0
+    IsFixedRate: bool = False
+    FixedClientRate: float | None = None
 
 
 class PreviewRulesContext(BaseModel):
@@ -58,7 +60,9 @@ class PreviewRequest(BaseModel):
     document_context: str | None = (
         None  # AI-synthesized project context from Document Analysis
     )
-    catalog_context: "CatalogContext | None" = None  # enables batch-pricing of unmatched items
+    catalog_context: "CatalogContext | None" = (
+        None  # enables batch-pricing of unmatched items
+    )
 
 
 class ScopeExtractionRequest(BaseModel):

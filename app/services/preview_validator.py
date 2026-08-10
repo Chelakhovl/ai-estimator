@@ -7,8 +7,8 @@ from app.schemas import (
     PreviewMatchedRow,
 )
 from app.services.calculator import (
-    calculate_client_cost_per_unit,
     calculate_client_total_cost,
+    resolve_client_cost_per_unit,
 )
 
 
@@ -86,7 +86,9 @@ def validate_and_materialize_match(
     if needs_review and not review_reason:
         review_reason = "Model flagged this row for manual review."
 
-    client_cost_per_unit = calculate_client_cost_per_unit(
+    client_cost_per_unit = resolve_client_cost_per_unit(
+        is_fixed_rate=candidate.IsFixedRate,
+        fixed_client_rate=candidate.FixedClientRate,
         work_labour_cost=candidate.WorkLabourCost,
         work_mat_cost=candidate.WorkMatCost,
         work_other_cost=candidate.WorkOtherCost,
