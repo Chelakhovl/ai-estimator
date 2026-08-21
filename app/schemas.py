@@ -144,6 +144,11 @@ class PreviewMatchedRow(BaseModel):
     MatchedSectionKey: str | None = None
     MatchedSectionTitle: str | None = None
     MatchedSectionOrder: int | None = None
+    # True when the model returned a PROFIT/LabourMarkup/MaterialMarkup that differs
+    # from the candidate row's own catalog default - the only legitimate way a
+    # preview row's computed rate can diverge from the catalog's own baseline math,
+    # since resolve_client_cost_per_unit otherwise reproduces it exactly.
+    MarkupOverridden: bool = False
 
 
 class PreviewUnmatchedItem(BaseModel):

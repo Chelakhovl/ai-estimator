@@ -66,6 +66,12 @@ def validate_and_materialize_match(
     if not 0 <= material_markup <= 100:
         raise ValueError(f"Invalid MaterialMarkup for row {candidate.INSIDEQUOTESGUID}")
 
+    markup_overridden = (
+        profit != candidate.PROFIT
+        or labour_markup != candidate.LabourMarkup
+        or material_markup != candidate.MaterialMarkup
+    )
+
     area = (llm_row.AREA if llm_row.AREA is not None else candidate.AREA) or ""
     if len(area) > 50:
         area = area[:50]
@@ -118,5 +124,6 @@ def validate_and_materialize_match(
         Confidence=round(confidence, 2),
         NeedsReview=needs_review,
         ReviewReason=review_reason,
+        MarkupOverridden=markup_overridden,
     )
     return matched_row, assumptions
