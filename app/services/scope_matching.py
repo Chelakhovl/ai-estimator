@@ -591,6 +591,30 @@ def suggest_quantity_from_takeoff(
             )
 
     if matched_rooms and unit == "m2":
+        if (
+            "tile" in tokens
+            and "wall" in tokens
+            and "floor" in tokens
+            and matched_wet_rooms
+        ):
+            # Combined "floor and walls tiling" work item — must sum both
+            # components. Checking "wall" or "floor" alone (below) would
+            # silently drop the other half of the area for this row.
+            quantity = float(
+                sum(room.estimated_wall_tiling_area_m2 for room in matched_wet_rooms)
+                + sum(room.estimated_floor_finish_area_m2 for room in matched_wet_rooms)
+            )
+            return TakeoffSuggestion(
+                quantity=quantity,
+                needs_review=True,
+                review_reason="Combined floor and wall tiling quantity was derived from matched wet-room geometry (floor area plus wall tiling area). Confirm full-height tiling, niches, shower trays, and any areas intentionally left un-tiled.",
+                assumption=_build_room_based_assumption(
+                    row.WorkName,
+                    quantity,
+                    matched_wet_rooms,
+                    "Used combined room-specific wet-room floor and wall tiling takeoff from the structured prompt.",
+                ),
+            )
         if "tile" in tokens and "wall" in tokens and matched_wet_rooms:
             quantity = float(
                 sum(room.estimated_wall_tiling_area_m2 for room in matched_wet_rooms)

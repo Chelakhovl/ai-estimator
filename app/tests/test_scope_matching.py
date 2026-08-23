@@ -21,7 +21,9 @@ from app.services.scope_matching import (
 )
 
 
-def _row(unit: str = "pcs", work_name: str = "Test work item", **overrides) -> CandidateRow:
+def _row(
+    unit: str = "pcs", work_name: str = "Test work item", **overrides
+) -> CandidateRow:
     return CandidateRow(
         INSIDEQUOTESGUID="row-1",
         WorkName=work_name,
@@ -48,7 +50,9 @@ def _scope(
     )
 
 
-def _room_takeoff(name: str = "Bathroom", room_type: str = "bathroom", **overrides) -> ExtractedRoomTakeoff:
+def _room_takeoff(
+    name: str = "Bathroom", room_type: str = "bathroom", **overrides
+) -> ExtractedRoomTakeoff:
     defaults = dict(
         level="ground floor",
         name=name,
@@ -82,7 +86,9 @@ class TestBuildScopeMatchingContext:
     def test_includes_section_titles_and_items(self):
         scope = _scope(
             sections=[
-                ExtractedSection(key="electrical", title="Electrical", lines=["12 downlights"]),
+                ExtractedSection(
+                    key="electrical", title="Electrical", lines=["12 downlights"]
+                ),
             ],
         )
         result = build_scope_matching_context(scope)
@@ -98,25 +104,49 @@ class TestIsExtractedContextSegment:
         assert is_extracted_context_segment("Ground floor", _scope()) is True
 
     def test_section_title_is_context(self):
-        scope = _scope(sections=[ExtractedSection(key="electrical", title="Electrical")])
+        scope = _scope(
+            sections=[ExtractedSection(key="electrical", title="Electrical")]
+        )
         assert is_extracted_context_segment("electrical", scope) is True
 
     def test_project_scope_label_is_context(self):
         scope = _scope(
-            property_context=ExtractedPropertyContext(project_scopes=["full refurbishment"])
+            property_context=ExtractedPropertyContext(
+                project_scopes=["full refurbishment"]
+            )
         )
         assert is_extracted_context_segment("full refurbishment", scope) is True
 
     def test_room_dimension_suffix_is_context(self):
         from app.schemas import ExtractedRoom
 
-        scope = _scope(rooms=[ExtractedRoom(level="ground floor", name="Kitchen", width_m=3, length_m=4, area_m2=12)])
+        scope = _scope(
+            rooms=[
+                ExtractedRoom(
+                    level="ground floor",
+                    name="Kitchen",
+                    width_m=3,
+                    length_m=4,
+                    area_m2=12,
+                )
+            ]
+        )
         assert is_extracted_context_segment("kitchen: 3.5 x 5.8", scope) is True
 
     def test_room_name_with_dimensions_elsewhere_is_context(self):
         from app.schemas import ExtractedRoom
 
-        scope = _scope(rooms=[ExtractedRoom(level="ground floor", name="Kitchen", width_m=3, length_m=4, area_m2=12)])
+        scope = _scope(
+            rooms=[
+                ExtractedRoom(
+                    level="ground floor",
+                    name="Kitchen",
+                    width_m=3,
+                    length_m=4,
+                    area_m2=12,
+                )
+            ]
+        )
         assert is_extracted_context_segment("kitchen area 3.5 x 5.8", scope) is True
 
     def test_unrelated_segment_is_not_context(self):
@@ -168,20 +198,34 @@ class TestRoomAreaLabel:
 
 class TestHasExtractedScopeLine:
     def test_returns_false_when_no_section_matches(self):
-        scope = _scope(sections=[ExtractedSection(key="electrical", title="Electrical", lines=["12 downlights"])])
+        scope = _scope(
+            sections=[
+                ExtractedSection(
+                    key="electrical", title="Electrical", lines=["12 downlights"]
+                )
+            ]
+        )
         assert (
-            _has_extracted_scope_line(scope, section_keys=("joinery",), keywords=("architrave",))
+            _has_extracted_scope_line(
+                scope, section_keys=("joinery",), keywords=("architrave",)
+            )
             is False
         )
 
     def test_returns_true_when_keywords_all_present(self):
         scope = _scope(
             sections=[
-                ExtractedSection(key="joinery", title="Joinery", lines=["fit architrave to all doors"]),
+                ExtractedSection(
+                    key="joinery",
+                    title="Joinery",
+                    lines=["fit architrave to all doors"],
+                ),
             ]
         )
         assert (
-            _has_extracted_scope_line(scope, section_keys=("joinery",), keywords=("architrave",))
+            _has_extracted_scope_line(
+                scope, section_keys=("joinery",), keywords=("architrave",)
+            )
             is True
         )
 
@@ -195,7 +239,11 @@ class TestMatchRowToExtractedSection:
     def test_skips_non_action_sections(self):
         row = _row(work_name="Paint walls")
         scope = _scope(
-            sections=[ExtractedSection(key="property", title="Property", lines=["paint walls"])]
+            sections=[
+                ExtractedSection(
+                    key="property", title="Property", lines=["paint walls"]
+                )
+            ]
         )
         assert match_row_to_extracted_section(row, scope, "paint walls") is None
 
@@ -203,8 +251,14 @@ class TestMatchRowToExtractedSection:
         row = _row(work_name="Fit downlights", WorkGroupName="Electrical")
         scope = _scope(
             sections=[
-                ExtractedSection(key="electrical", title="Electrical", lines=["12 downlights and sockets"]),
-                ExtractedSection(key="plastering", title="Plastering", lines=["skim walls"]),
+                ExtractedSection(
+                    key="electrical",
+                    title="Electrical",
+                    lines=["12 downlights and sockets"],
+                ),
+                ExtractedSection(
+                    key="plastering", title="Plastering", lines=["skim walls"]
+                ),
             ]
         )
         match = match_row_to_extracted_section(row, scope, "fit downlights")
@@ -258,7 +312,9 @@ class TestM2WholePropertyBranches:
     def test_extension_external_wall(self):
         row = _row(unit="m2", work_name="Build external cavity wall")
         scope = _scope(estimated_extension_external_wall_area_m2=30.0)
-        result = suggest_quantity_from_takeoff(row, scope, "extension external cavity wall")
+        result = suggest_quantity_from_takeoff(
+            row, scope, "extension external cavity wall"
+        )
         assert result.quantity == 30.0
 
     def test_roof_removal(self):
@@ -350,6 +406,21 @@ class TestM2MatchedRoomBranches:
         result = suggest_quantity_from_takeoff(row, scope, "bathroom tile floor")
         assert result.quantity == 7.0
 
+    def test_combined_floor_and_wall_tiling(self):
+        # A single "floor and walls tiling" work item must sum both
+        # components — regression test for a bug where the wall-only branch
+        # matched first and silently dropped the floor area (or vice versa)
+        # for any row whose name/tokens mention both floor and wall.
+        room = _room_takeoff(
+            estimated_wall_tiling_area_m2=11.67, estimated_floor_finish_area_m2=6.6
+        )
+        row = _row(unit="m2", work_name="Floor and walls tiling")
+        scope = _scope(room_takeoff=[room])
+        result = suggest_quantity_from_takeoff(
+            row, scope, "bathroom tile floor and walls"
+        )
+        assert result.quantity == pytest.approx(18.27)
+
     def test_ceiling_paint_matched_room(self):
         room = _room_takeoff(estimated_ceiling_finish_area_m2=4.0)
         row = _row(unit="m2", work_name="Paint ceiling")
@@ -365,7 +436,10 @@ class TestM2MatchedRoomBranches:
         assert result.quantity == 11.0
 
     def test_wall_paint_matched_room_assumption_summarizes_more_than_four_rooms(self):
-        rooms = [_room_takeoff(name="Bedroom", estimated_wall_finish_area_m2=5.0) for _ in range(5)]
+        rooms = [
+            _room_takeoff(name="Bedroom", estimated_wall_finish_area_m2=5.0)
+            for _ in range(5)
+        ]
         row = _row(unit="m2", work_name="Paint walls")
         scope = _scope(room_takeoff=rooms)
         result = suggest_quantity_from_takeoff(row, scope, "bedroom paint wall")
@@ -410,7 +484,9 @@ class TestPcsMatchedRoomBranches:
         assert result.quantity == 6.0
 
     def test_downlight_falls_back_to_lighting_point_count(self):
-        room = _room_takeoff(estimated_downlight_count=0.0, estimated_lighting_point_count=3.0)
+        room = _room_takeoff(
+            estimated_downlight_count=0.0, estimated_lighting_point_count=3.0
+        )
         row = _row(unit="pcs", work_name="Fit spotlights")
         scope = _scope(room_takeoff=[room])
         result = suggest_quantity_from_takeoff(row, scope, "bathroom spotlight")
@@ -441,11 +517,15 @@ class TestPcsMatchedRoomBranches:
         room = _room_takeoff(estimated_ducted_extractor_count=2.0)
         row = _row(unit="pcs", work_name="Fit ducted extractor fan")
         scope = _scope(room_takeoff=[room])
-        result = suggest_quantity_from_takeoff(row, scope, "bathroom extractor fan duct")
+        result = suggest_quantity_from_takeoff(
+            row, scope, "bathroom extractor fan duct"
+        )
         assert result.quantity == 2.0
 
     def test_ducted_extractor_falls_back_to_extractor_fan_count(self):
-        room = _room_takeoff(estimated_ducted_extractor_count=0.0, estimated_extractor_fan_count=1.0)
+        room = _room_takeoff(
+            estimated_ducted_extractor_count=0.0, estimated_extractor_fan_count=1.0
+        )
         row = _row(unit="pcs", work_name="Fit ducted fan")
         scope = _scope(room_takeoff=[room])
         result = suggest_quantity_from_takeoff(row, scope, "bathroom fan duct")
@@ -515,7 +595,9 @@ class TestPcsMatchedRoomBranches:
         assert result.quantity == 1.0
 
     def test_sink_matched_rooms(self):
-        room = _room_takeoff(name="Kitchen", room_type="kitchen", estimated_sink_count=1.0)
+        room = _room_takeoff(
+            name="Kitchen", room_type="kitchen", estimated_sink_count=1.0
+        )
         row = _row(unit="pcs", work_name="Fit sink")
         scope = _scope(room_takeoff=[room])
         result = suggest_quantity_from_takeoff(row, scope, "kitchen sink")
@@ -523,11 +605,15 @@ class TestPcsMatchedRoomBranches:
 
     def test_appliance_connection_matched_rooms(self):
         room = _room_takeoff(
-            name="Kitchen", room_type="kitchen", estimated_appliance_connection_count=2.0
+            name="Kitchen",
+            room_type="kitchen",
+            estimated_appliance_connection_count=2.0,
         )
         row = _row(unit="pcs", work_name="Connect appliance")
         scope = _scope(room_takeoff=[room])
-        result = suggest_quantity_from_takeoff(row, scope, "kitchen appliance connection")
+        result = suggest_quantity_from_takeoff(
+            row, scope, "kitchen appliance connection"
+        )
         assert result.quantity == 2.0
 
     def test_bath_matched_rooms(self):
@@ -576,7 +662,13 @@ class TestPcsWholePropertyFixtureBranches:
         row = _row(unit="pcs", work_name="Fit architrave")
         scope = _scope(
             architrave_set_count=6.0,
-            sections=[ExtractedSection(key="joinery", title="Joinery", lines=["fit architrave to all doors"])],
+            sections=[
+                ExtractedSection(
+                    key="joinery",
+                    title="Joinery",
+                    lines=["fit architrave to all doors"],
+                )
+            ],
         )
         result = suggest_quantity_from_takeoff(row, scope, "architrave")
         assert result.quantity == 6.0
@@ -595,7 +687,9 @@ class TestPcsWholePropertyFixtureBranches:
 
     def test_pocket_door_fire_rated_set_count(self):
         row = _row(unit="pcs", work_name="Fit fire rated pocket door")
-        scope = _scope(fire_rated_pocket_door_set_count=1.0, double_pocket_door_set_count=1.0)
+        scope = _scope(
+            fire_rated_pocket_door_set_count=1.0, double_pocket_door_set_count=1.0
+        )
         result = suggest_quantity_from_takeoff(row, scope, "fire pocket door")
         assert result.quantity == 1.0
 
@@ -643,7 +737,9 @@ class TestPcsWholePropertyFixtureBranches:
 
     def test_hardwired_appliance_falls_back_to_connection_count(self):
         row = _row(unit="pcs", work_name="Wire appliance")
-        scope = _scope(hardwired_appliance_count=0.0, total_appliance_connection_count=4.0)
+        scope = _scope(
+            hardwired_appliance_count=0.0, total_appliance_connection_count=4.0
+        )
         result = suggest_quantity_from_takeoff(row, scope, "appliance wire")
         assert result.quantity == 4.0
 
@@ -720,7 +816,9 @@ class TestExactCountCases:
             ("fit fence", "fence_count", 1),
         ],
     )
-    def test_exact_count_branch_returns_summary_value(self, segment, summary_field, summary_value):
+    def test_exact_count_branch_returns_summary_value(
+        self, segment, summary_field, summary_value
+    ):
         row = _row(unit="pcs", work_name=segment.title())
         scope = _scope(**{summary_field: summary_value})
         result = suggest_quantity_from_takeoff(row, scope, segment)
@@ -743,7 +841,9 @@ class TestM3Branches:
     def test_total_foundation_concrete(self):
         row = _row(unit="m3", work_name="Pour foundation concrete")
         scope = _scope(total_foundation_concrete_m3=20.0)
-        result = suggest_quantity_from_takeoff(row, scope, "foundation concrete excavate")
+        result = suggest_quantity_from_takeoff(
+            row, scope, "foundation concrete excavate"
+        )
         assert result.quantity == 20.0
         assert result.needs_review is True
 
@@ -767,7 +867,13 @@ class TestMUnitBranches:
         row = _row(unit="m", work_name="Fit architrave")
         scope = _scope(
             estimated_architrave_lm=30.0,
-            sections=[ExtractedSection(key="joinery", title="Joinery", lines=["fit architrave to all doors"])],
+            sections=[
+                ExtractedSection(
+                    key="joinery",
+                    title="Joinery",
+                    lines=["fit architrave to all doors"],
+                )
+            ],
         )
         result = suggest_quantity_from_takeoff(row, scope, "architrave")
         assert result.quantity == 30.0
@@ -782,5 +888,7 @@ class TestMUnitBranches:
 class TestNoMatchFallback:
     def test_returns_empty_suggestion_when_nothing_matches(self):
         row = _row(unit="pcs", work_name="Unrelated bespoke work")
-        result = suggest_quantity_from_takeoff(row, _scope(), "something with no takeoff hooks")
+        result = suggest_quantity_from_takeoff(
+            row, _scope(), "something with no takeoff hooks"
+        )
         assert result.quantity is None
