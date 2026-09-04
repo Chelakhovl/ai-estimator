@@ -1,6 +1,6 @@
 """Auto-generated from the backend canonical registry. Do not edit manually."""
 
-TAKEOFF_HEURISTICS_VERSION = "2026-04-27-audit-revert"
+TAKEOFF_HEURISTICS_VERSION = "2026-04-27"
 TAKEOFF_HEURISTICS_SOURCE = "canonical_registry_generated_ai_takeoff_defaults"
 CANONICAL_SOURCE = "backend_registry"
 
