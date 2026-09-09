@@ -496,6 +496,20 @@ class LLMBatchPriceOutput(BaseModel):
     items: list[LLMBatchPricedItem]
 
 
+class PreviewIndicativeRange(BaseModel):
+    """A rough low/high £ band shown before the fully-priced draft, so the
+    estimator isn't anchored on a precise-looking number that may still need
+    work. Deliberately not a second pricing system - just a confidence-weighted
+    spread of the matched_rows totals already computed for this preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    low: float = Field(ge=0)
+    high: float = Field(ge=0)
+    matched_total: float = Field(ge=0)
+    basis: str
+
+
 class PreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -514,6 +528,7 @@ class PreviewResponse(BaseModel):
     coverage_summary: PreviewCoverageSummary = Field(
         default_factory=PreviewCoverageSummary
     )
+    indicative_range: PreviewIndicativeRange | None = None
     error_text: str = ""
 
 

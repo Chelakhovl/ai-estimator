@@ -12,6 +12,7 @@ from app.schemas import (
     PreviewAssumption,
     PreviewCoveragePrompt,
     PreviewCoverageSummary,
+    PreviewIndicativeRange,
     PreviewMatchedRow,
     PreviewRequest,
     PreviewReviewQueueItem,
@@ -1103,6 +1104,85 @@ def _normalize_queue_code(value: str, *, fallback: str) -> str:
     return normalized or fallback
 
 
+_INDICATIVE_RANGE_TIGHT_BAND = 0.10
+_INDICATIVE_RANGE_WIDE_BAND = 0.35
+_INDICATIVE_RANGE_CONFIDENT_THRESHOLD = 0.8
+_INDICATIVE_RANGE_UNMATCHED_HIGH_FACTOR = 0.5
+
+
+def _build_indicative_range(
+    matched_rows: list[PreviewMatchedRow],
+    unmatched_items: list[PreviewUnmatchedItem],
+    custom_priced_rows: list[CustomPricedRow],
+) -> PreviewIndicativeRange | None:
+    """A confidence-weighted spread of the totals already computed for this
+    preview - not a second pricing system. Confident rows (not flagged for
+    review, high match confidence) get a tight +-10% band; everything else
+    (low-confidence matches, custom-priced unmatched items) gets a wide +-35%
+    band. Unresolved scope (items the AI never matched at all) only widens the
+    high end, since a missing row can only make the real total go up."""
+    if not matched_rows and not custom_priced_rows:
+        return None
+
+    matched_total = sum(row.ClientTotalCost for row in matched_rows)
+    confident_total = sum(
+        row.ClientTotalCost
+        for row in matched_rows
+        if not row.NeedsReview
+        and row.Confidence >= _INDICATIVE_RANGE_CONFIDENT_THRESHOLD
+    )
+    uncertain_total = matched_total - confident_total
+    custom_total = sum(
+        row.labour_cost + row.material_cost + row.other_cost
+        for row in custom_priced_rows
+    )
+
+    low = (
+        confident_total * (1 - _INDICATIVE_RANGE_TIGHT_BAND)
+        + uncertain_total * (1 - _INDICATIVE_RANGE_WIDE_BAND)
+        + custom_total * (1 - _INDICATIVE_RANGE_WIDE_BAND)
+    )
+    high = (
+        confident_total * (1 + _INDICATIVE_RANGE_TIGHT_BAND)
+        + uncertain_total * (1 + _INDICATIVE_RANGE_WIDE_BAND)
+        + custom_total * (1 + _INDICATIVE_RANGE_WIDE_BAND)
+    )
+
+    if unmatched_items:
+        priced_row_count = len(matched_rows) + len(custom_priced_rows)
+        average_row_cost = (
+            (matched_total + custom_total) / priced_row_count
+            if priced_row_count
+            else 0.0
+        )
+        high += (
+            len(unmatched_items)
+            * average_row_cost
+            * _INDICATIVE_RANGE_UNMATCHED_HIGH_FACTOR
+        )
+
+    low = max(0.0, round(low, 2))
+    high = max(low, round(high, 2))
+
+    needs_review_count = sum(1 for row in matched_rows if row.NeedsReview)
+    basis_parts = [
+        f"{len(matched_rows)} row{'s' if len(matched_rows) != 1 else ''} matched"
+    ]
+    if needs_review_count:
+        basis_parts.append(f"{needs_review_count} flagged for review")
+    if unmatched_items:
+        basis_parts.append(
+            f"{len(unmatched_items)} scope item{'s' if len(unmatched_items) != 1 else ''} unmatched"
+        )
+
+    return PreviewIndicativeRange(
+        low=low,
+        high=high,
+        matched_total=round(matched_total + custom_total, 2),
+        basis=", ".join(basis_parts) + ".",
+    )
+
+
 def _build_review_queue(
     matched_rows: list[PreviewMatchedRow],
     unmatched_items: list[PreviewUnmatchedItem],
@@ -1494,6 +1574,9 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
     )
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
+    indicative_range = _build_indicative_range(
+        matched_rows, unmatched_items, custom_priced_rows
+    )
 
     return PreviewResponse(
         summary_text=summary_text,
@@ -1520,6 +1603,7 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
             extracted_scope,
             normalized_scope_used=input_mode == "normalized",
         ),
+        indicative_range=indicative_range,
         error_text="",
     )
 
@@ -1794,6 +1878,9 @@ def _generate_llm_preview(
     )
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
+    indicative_range = _build_indicative_range(
+        matched_rows, unmatched_items, custom_priced_rows
+    )
 
     return PreviewResponse(
         summary_text=summary_text,
@@ -1822,6 +1909,7 @@ def _generate_llm_preview(
             extracted_scope,
             normalized_scope_used=input_mode == "normalized",
         ),
+        indicative_range=indicative_range,
         error_text="",
     )
 
