@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import logging
+import random
 import re
 
 from app.config import settings
@@ -13,6 +14,7 @@ from app.schemas import (
     PreviewAssumption,
     PreviewCoveragePrompt,
     PreviewCoverageSummary,
+    PreviewDoubleReadSummary,
     PreviewDuplicateFlag,
     PreviewIndicativeRange,
     PreviewMatchedRow,
@@ -1251,6 +1253,103 @@ def _build_duplicate_flags(
     return flags
 
 
+_DOUBLE_READ_RECOMMEND_TOTAL_THRESHOLD = 15000.0
+_DOUBLE_READ_RECOMMEND_REVIEW_RATIO_THRESHOLD = 0.3
+_DOUBLE_READ_TEMPERATURE = 0.4
+_DOUBLE_READ_QUANTITY_TOLERANCE = 0.15
+
+
+def _should_recommend_double_read(matched_rows: list[PreviewMatchedRow]) -> bool:
+    """Advisory only - never triggers a second LLM pass by itself. A large draft
+    or one with a lot of low-confidence rows is where an independent cross-check
+    is actually worth the extra cost/latency; the frontend uses this to
+    pre-highlight the manual "Re-check independently" button, not to auto-run it."""
+    if not matched_rows:
+        return False
+    matched_total = sum(row.ClientTotalCost for row in matched_rows)
+    if matched_total > _DOUBLE_READ_RECOMMEND_TOTAL_THRESHOLD:
+        return True
+    review_ratio = sum(1 for row in matched_rows if row.NeedsReview) / len(matched_rows)
+    return review_ratio > _DOUBLE_READ_RECOMMEND_REVIEW_RATIO_THRESHOLD
+
+
+def _run_double_read(
+    client: LLMClient,
+    *,
+    source_prompt: str,
+    shortlist: list[CandidateRow],
+    extracted_scope,
+    document_context: str | None,
+    matched_rows: list[PreviewMatchedRow],
+) -> PreviewDoubleReadSummary | None:
+    """Run an independent, perturbed second pass over the same scope and mark
+    each first-pass row's Corroborated field. The first pass runs at
+    temperature=0 (hardcoded default), so a naive identical re-run would just
+    repeat the same answer and prove nothing - this pass instead uses a nonzero
+    temperature, a shuffled candidate order (structured-output list position
+    bias is real), and no few-shot accepted_examples (removes anchoring toward
+    previously-accepted rows). Both passes validate through the same
+    catalog-pricing path; this second pass is only ever used for cross-check,
+    never to override the first pass's pricing. Returns None (leaving every
+    row's Corroborated untouched) if the second pass itself fails - this is an
+    advisory cross-check, not something that should fail the whole preview."""
+    shuffled_shortlist = list(shortlist)
+    # Seeded on the prompt text so a given request perturbs deterministically
+    # (reproducible in tests) without ever repeating the exact same order twice
+    # for genuinely different scopes.
+    random.Random(source_prompt).shuffle(shuffled_shortlist)
+
+    try:
+        second_pass_output = client.preview_match(
+            prompt=source_prompt,
+            candidate_rows=shuffled_shortlist,
+            extracted_scope=extracted_scope,
+            accepted_examples=None,
+            document_context=document_context,
+            temperature=_DOUBLE_READ_TEMPERATURE,
+        )
+    except Exception:
+        return None
+
+    second_pass_quantity_by_guid: dict[str, float] = {
+        row.INSIDEQUOTESGUID: (row.QUANTITY or 0)
+        for row in second_pass_output.matched_rows
+    }
+
+    corroborated_count = 0
+    diverged_count = 0
+    only_in_first_pass_count = 0
+    for row in matched_rows:
+        second_pass_quantity = second_pass_quantity_by_guid.get(row.INSIDEQUOTESGUID)
+        if second_pass_quantity is None:
+            row.Corroborated = False
+            only_in_first_pass_count += 1
+            continue
+        quantity_diff_ratio = (
+            abs(second_pass_quantity - row.QUANTITY) / row.QUANTITY
+            if row.QUANTITY
+            else 1.0
+        )
+        if quantity_diff_ratio <= _DOUBLE_READ_QUANTITY_TOLERANCE:
+            row.Corroborated = True
+            corroborated_count += 1
+        else:
+            row.Corroborated = False
+            diverged_count += 1
+
+    first_pass_guids = {row.INSIDEQUOTESGUID for row in matched_rows}
+    only_in_second_pass_count = len(
+        [guid for guid in second_pass_quantity_by_guid if guid not in first_pass_guids]
+    )
+
+    return PreviewDoubleReadSummary(
+        corroborated_count=corroborated_count,
+        diverged_count=diverged_count,
+        only_in_first_pass_count=only_in_first_pass_count,
+        only_in_second_pass_count=only_in_second_pass_count,
+    )
+
+
 def _build_review_queue(
     matched_rows: list[PreviewMatchedRow],
     unmatched_items: list[PreviewUnmatchedItem],
@@ -1952,6 +2051,19 @@ def _generate_llm_preview(
         matched_rows, unmatched_items, custom_priced_rows
     )
     duplicate_flags = _build_duplicate_flags(matched_rows)
+    double_read_summary = (
+        _run_double_read(
+            client,
+            source_prompt=source_prompt,
+            shortlist=shortlist,
+            extracted_scope=extracted_scope,
+            document_context=request.document_context,
+            matched_rows=matched_rows,
+        )
+        if request.double_read
+        else None
+    )
+    double_read_recommended = _should_recommend_double_read(matched_rows)
 
     return PreviewResponse(
         summary_text=summary_text,
@@ -1982,6 +2094,8 @@ def _generate_llm_preview(
         ),
         indicative_range=indicative_range,
         duplicate_flags=duplicate_flags,
+        double_read_summary=double_read_summary,
+        double_read_recommended=double_read_recommended,
         error_text="",
     )
 

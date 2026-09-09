@@ -63,6 +63,10 @@ class PreviewRequest(BaseModel):
     catalog_context: "CatalogContext | None" = (
         None  # enables batch-pricing of unmatched items
     )
+    # Explicit opt-in only - never auto-triggered server-side, since it doubles
+    # LLM cost/latency for this request. See matcher._should_recommend_double_read
+    # for the (advisory-only) threshold that tells the frontend when to suggest it.
+    double_read: bool = False
 
 
 class ScopeExtractionRequest(BaseModel):
@@ -154,6 +158,11 @@ class PreviewMatchedRow(BaseModel):
     # preview row's computed rate can diverge from the catalog's own baseline math,
     # since resolve_client_cost_per_unit otherwise reproduces it exactly.
     MarkupOverridden: bool = False
+    # None when double-read wasn't run for this request. Otherwise: True if this
+    # row's catalog id also appears in the independent second pass with a
+    # similar quantity, False if it's absent or diverges - see
+    # matcher._generate_llm_preview's double-read comparison.
+    Corroborated: bool | None = None
 
 
 class PreviewUnmatchedItem(BaseModel):
@@ -528,6 +537,21 @@ class PreviewDuplicateFlag(BaseModel):
     suggested_action: str
 
 
+class PreviewDoubleReadSummary(BaseModel):
+    """Result of comparing the requested pass against an independent, perturbed
+    second LLM pass over the same scope (different temperature, shuffled
+    candidate order, no few-shot examples) - a cross-check, never a second
+    source of pricing truth. Only present when PreviewRequest.double_read was
+    explicitly set."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    corroborated_count: int = 0
+    diverged_count: int = 0
+    only_in_first_pass_count: int = 0
+    only_in_second_pass_count: int = 0
+
+
 class PreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -548,6 +572,11 @@ class PreviewResponse(BaseModel):
     )
     indicative_range: PreviewIndicativeRange | None = None
     duplicate_flags: list[PreviewDuplicateFlag] = Field(default_factory=list)
+    double_read_summary: PreviewDoubleReadSummary | None = None
+    # Advisory only - set by matcher._should_recommend_double_read from this
+    # same response's matched_rows. Never triggers a second LLM pass on its
+    # own; the frontend uses it to pre-highlight the manual re-check button.
+    double_read_recommended: bool = False
     error_text: str = ""
 
 

@@ -97,6 +97,7 @@ class LLMClient:
         accepted_examples: list[PreviewAcceptedExample] | None,
         retry_mode: bool,
         document_context: str | None = None,
+        temperature: float = 0,
     ) -> tuple[LLMPreviewOutput, dict[str, object]]:
         if self.client is None:
             raise RuntimeError("LLM client is not configured.")
@@ -117,7 +118,7 @@ class LLMClient:
                     model=self.model,
                     input=messages,
                     text_format=LLMPreviewOutput,
-                    temperature=0,
+                    temperature=temperature,
                 )
                 parsed = getattr(response, "output_parsed", None)
                 if parsed is None:
@@ -151,7 +152,7 @@ class LLMClient:
                 model=self.model,
                 messages=messages,
                 response_format=LLMPreviewOutput,
-                temperature=0,
+                temperature=temperature,
             )
             parsed = response.choices[0].message.parsed if response.choices else None
             if parsed is None:
@@ -185,6 +186,7 @@ class LLMClient:
         extracted_scope: ScopeExtractionResponse | None = None,
         accepted_examples: list[PreviewAcceptedExample] | None = None,
         document_context: str | None = None,
+        temperature: float = 0,
     ) -> LLMPreviewOutput:
         if not self.enabled or self.client is None:
             raise RuntimeError("LLM client is not configured.")
@@ -206,6 +208,7 @@ class LLMClient:
                         accepted_examples=accepted_examples,
                         retry_mode=retry_mode,
                         document_context=document_context,
+                        temperature=temperature,
                     )
                     latency_ms = int(request_metadata.get("llm_latency_ms", 0) or 0)
                     usage = request_metadata.get("usage", {}) or {}

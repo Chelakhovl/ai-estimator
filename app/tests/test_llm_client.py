@@ -35,7 +35,9 @@ def _empty_llm_output() -> LLMPreviewOutput:
 
 class TestLLMClientInit:
     def test_disabled_when_no_api_key(self):
-        with patch.object(app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")):
+        with patch.object(
+            app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")
+        ):
             client = app_llm_client.LLMClient()
 
         assert client.is_enabled() is False
@@ -43,9 +45,14 @@ class TestLLMClientInit:
 
     def test_enabled_constructs_openai_client(self):
         fake_client = MagicMock()
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client) as mock_openai:
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client) as mock_openai,
+        ):
             client = app_llm_client.LLMClient()
 
         assert client.is_enabled() is True
@@ -55,7 +62,9 @@ class TestLLMClientInit:
 
 class TestSupportsStructuredOutputApis:
     def test_supports_responses_parse_false_when_client_none(self):
-        with patch.object(app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")):
+        with patch.object(
+            app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")
+        ):
             client = app_llm_client.LLMClient()
 
         assert client._supports_responses_parse() is False
@@ -64,9 +73,14 @@ class TestSupportsStructuredOutputApis:
     def test_supports_responses_parse_true_when_available(self):
         fake_client = MagicMock()
         fake_client.responses.parse = MagicMock()
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
 
         assert client._supports_responses_parse() is True
@@ -75,9 +89,14 @@ class TestSupportsStructuredOutputApis:
         fake_client = MagicMock()
         fake_client.responses = None
         fake_client.beta.chat.completions.parse = MagicMock()
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
 
         assert client._supports_chat_completions_parse() is True
@@ -85,7 +104,9 @@ class TestSupportsStructuredOutputApis:
 
 class TestRequestStructuredPreview:
     def test_raises_when_client_not_configured(self):
-        with patch.object(app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")):
+        with patch.object(
+            app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")
+        ):
             client = app_llm_client.LLMClient()
 
         try:
@@ -107,9 +128,14 @@ class TestRequestStructuredPreview:
         fake_client = MagicMock()
         fake_client.responses.parse.return_value = fake_response
 
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             result, metadata = client._request_structured_preview(
                 prompt="Paint walls 20m2",
@@ -130,15 +156,102 @@ class TestRequestStructuredPreview:
         _, kwargs = fake_client.responses.parse.call_args
         assert kwargs["model"] == "gpt-4o"
         assert kwargs["text_format"] is LLMPreviewOutput
+        assert kwargs["temperature"] == 0
+
+    def test_temperature_defaults_to_zero_and_is_threaded_to_responses_parse(self):
+        parsed = _empty_llm_output()
+        fake_response = MagicMock(output_parsed=parsed, usage=None)
+        fake_client = MagicMock()
+        fake_client.responses.parse.return_value = fake_response
+
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
+            client = app_llm_client.LLMClient()
+            client._request_structured_preview(
+                prompt="Paint walls 20m2",
+                candidate_rows=[],
+                extracted_scope=None,
+                accepted_examples=None,
+                retry_mode=False,
+                temperature=0.4,
+            )
+
+        _, kwargs = fake_client.responses.parse.call_args
+        assert kwargs["temperature"] == 0.4
+
+    def test_temperature_is_threaded_to_chat_completions_parse(self):
+        parsed = _empty_llm_output()
+        fake_response = MagicMock()
+        fake_response.choices = [MagicMock(message=MagicMock(parsed=parsed))]
+        fake_response.usage = None
+        fake_client = MagicMock()
+        fake_client.responses = None
+        fake_client.beta.chat.completions.parse.return_value = fake_response
+
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
+            client = app_llm_client.LLMClient()
+            client._request_structured_preview(
+                prompt="Paint walls 20m2",
+                candidate_rows=[],
+                extracted_scope=None,
+                accepted_examples=None,
+                retry_mode=False,
+                temperature=0.4,
+            )
+
+        _, kwargs = fake_client.beta.chat.completions.parse.call_args
+        assert kwargs["temperature"] == 0.4
+
+    def test_preview_match_threads_temperature_through_to_request_structured_preview(
+        self,
+    ):
+        parsed = _empty_llm_output()
+        fake_response = MagicMock(output_parsed=parsed, usage=None)
+        fake_client = MagicMock()
+        fake_client.responses.parse.return_value = fake_response
+
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
+            client = app_llm_client.LLMClient()
+            client.preview_match(
+                prompt="Paint walls 20m2", candidate_rows=[], temperature=0.4
+            )
+
+        _, kwargs = fake_client.responses.parse.call_args
+        assert kwargs["temperature"] == 0.4
 
     def test_raises_structured_output_error_when_responses_parse_returns_none(self):
         fake_response = MagicMock(output_parsed=None)
         fake_client = MagicMock()
         fake_client.responses.parse.return_value = fake_response
 
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             try:
                 client._request_structured_preview(
@@ -162,9 +275,14 @@ class TestRequestStructuredPreview:
         fake_client.responses = None
         fake_client.beta.chat.completions.parse.return_value = fake_response
 
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             result, metadata = client._request_structured_preview(
                 prompt="Paint walls 20m2",
@@ -183,9 +301,14 @@ class TestRequestStructuredPreview:
         fake_client.responses = None
         fake_client.beta.chat.completions.parse = None
 
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             try:
                 client._request_structured_preview(
@@ -203,9 +326,14 @@ class TestRequestStructuredPreview:
         fake_client = MagicMock()
         fake_client.responses.parse.side_effect = RuntimeError("network unreachable")
 
-        with patch.object(
-            app_llm_client, "settings", FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o")
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o"),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             try:
                 client._request_structured_preview(
@@ -222,7 +350,9 @@ class TestRequestStructuredPreview:
 
 class TestPreviewMatch:
     def test_raises_when_not_enabled(self):
-        with patch.object(app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")):
+        with patch.object(
+            app_llm_client, "settings", FakeSettings(openai_api_key="", openai_model="")
+        ):
             client = app_llm_client.LLMClient()
 
         try:
@@ -237,11 +367,18 @@ class TestPreviewMatch:
         fake_client = MagicMock()
         fake_client.responses.parse.return_value = fake_response
 
-        with patch.object(
-            app_llm_client,
-            "settings",
-            FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o", openai_request_max_attempts=2),
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(
+                    openai_api_key="sk-test",
+                    openai_model="gpt-4o",
+                    openai_request_max_attempts=2,
+                ),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             result = client.preview_match(prompt="Paint walls 20m2", candidate_rows=[])
 
@@ -255,13 +392,23 @@ class TestPreviewMatch:
         parsed = _empty_llm_output()
         fake_response_good = MagicMock(output_parsed=parsed, usage=None)
         fake_client = MagicMock()
-        fake_client.responses.parse.side_effect = [fake_response_bad, fake_response_good]
+        fake_client.responses.parse.side_effect = [
+            fake_response_bad,
+            fake_response_good,
+        ]
 
-        with patch.object(
-            app_llm_client,
-            "settings",
-            FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o", openai_request_max_attempts=1),
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(
+                    openai_api_key="sk-test",
+                    openai_model="gpt-4o",
+                    openai_request_max_attempts=1,
+                ),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             result = client.preview_match(prompt="Paint walls 20m2", candidate_rows=[])
 
@@ -274,11 +421,19 @@ class TestPreviewMatch:
         fake_client = MagicMock()
         fake_client.responses.parse.side_effect = RuntimeError("network unreachable")
 
-        with patch.object(
-            app_llm_client,
-            "settings",
-            FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o", openai_request_max_attempts=2),
-        ), patch("openai.OpenAI", return_value=fake_client), patch("app.services.llm_client.sleep"):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(
+                    openai_api_key="sk-test",
+                    openai_model="gpt-4o",
+                    openai_request_max_attempts=2,
+                ),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+            patch("app.services.llm_client.sleep"),
+        ):
             client = app_llm_client.LLMClient()
             try:
                 client.preview_match(prompt="Paint walls 20m2", candidate_rows=[])
@@ -294,11 +449,18 @@ class TestPreviewMatch:
         fake_client = MagicMock()
         fake_client.responses.parse.return_value = fake_response_bad
 
-        with patch.object(
-            app_llm_client,
-            "settings",
-            FakeSettings(openai_api_key="sk-test", openai_model="gpt-4o", openai_request_max_attempts=1),
-        ), patch("openai.OpenAI", return_value=fake_client):
+        with (
+            patch.object(
+                app_llm_client,
+                "settings",
+                FakeSettings(
+                    openai_api_key="sk-test",
+                    openai_model="gpt-4o",
+                    openai_request_max_attempts=1,
+                ),
+            ),
+            patch("openai.OpenAI", return_value=fake_client),
+        ):
             client = app_llm_client.LLMClient()
             try:
                 client.preview_match(prompt="Paint walls 20m2", candidate_rows=[])
