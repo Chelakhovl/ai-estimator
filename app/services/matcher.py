@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 import logging
 import re
 
@@ -12,6 +13,7 @@ from app.schemas import (
     PreviewAssumption,
     PreviewCoveragePrompt,
     PreviewCoverageSummary,
+    PreviewDuplicateFlag,
     PreviewIndicativeRange,
     PreviewMatchedRow,
     PreviewRequest,
@@ -1183,6 +1185,72 @@ def _build_indicative_range(
     )
 
 
+_DUPLICATE_NAME_SIMILARITY_THRESHOLD = 0.82
+_DUPLICATE_MIN_SHARED_TOKENS = 2
+_DUPLICATE_NORMALIZE_RE = re.compile(r"[^a-z\s]")
+
+
+def _normalize_work_name_for_duplicate_check(name: str) -> str:
+    lowered = name.lower()
+    stripped = _DUPLICATE_NORMALIZE_RE.sub(" ", lowered)
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+def _build_duplicate_flags(
+    matched_rows: list[PreviewMatchedRow],
+) -> list[PreviewDuplicateFlag]:
+    """Detect two DIFFERENT matched rows that look like the same work counted
+    twice in the same room/section. The existing used_ids dedup in
+    _generate_llm_preview only rejects the model picking the exact same catalog
+    row id twice - it does nothing for two different rows describing
+    overlapping scope (e.g. two "strip out kitchen" variants both matched for
+    the same room). Grouped by section/area first (cheap, no LLM call) so this
+    never compares unrelated rows from opposite ends of the quote; within a
+    group, both a string-similarity threshold AND a minimum shared-token count
+    must hold, so short generic names like "Paint walls" vs "Paint ceiling"
+    don't false-positive on the string ratio alone."""
+    groups: dict[str, list[PreviewMatchedRow]] = {}
+    for row in matched_rows:
+        key = (
+            row.MatchedSectionKey or (row.AREA or "").strip().lower()
+        ) or "_ungrouped"
+        groups.setdefault(key, []).append(row)
+
+    flags: list[PreviewDuplicateFlag] = []
+    for scope_label, rows in groups.items():
+        if len(rows) < 2:
+            continue
+        for i in range(len(rows)):
+            for j in range(i + 1, len(rows)):
+                row_a, row_b = rows[i], rows[j]
+                if row_a.INSIDEQUOTESGUID == row_b.INSIDEQUOTESGUID:
+                    continue
+                name_a = _normalize_work_name_for_duplicate_check(row_a.WorkName)
+                name_b = _normalize_work_name_for_duplicate_check(row_b.WorkName)
+                if not name_a or not name_b:
+                    continue
+                similarity = SequenceMatcher(None, name_a, name_b).ratio()
+                if similarity < _DUPLICATE_NAME_SIMILARITY_THRESHOLD:
+                    continue
+                shared_tokens = _significant_support_tokens(
+                    row_a.WorkName
+                ) & _significant_support_tokens(row_b.WorkName)
+                if len(shared_tokens) < _DUPLICATE_MIN_SHARED_TOKENS:
+                    continue
+                flags.append(
+                    PreviewDuplicateFlag(
+                        row_a_guid=row_a.INSIDEQUOTESGUID,
+                        row_b_guid=row_b.INSIDEQUOTESGUID,
+                        row_a_title=row_a.WorkName,
+                        row_b_title=row_b.WorkName,
+                        similarity=round(similarity, 2),
+                        scope_label="" if scope_label == "_ungrouped" else scope_label,
+                        suggested_action="Keep whichever better matches the scope, or confirm both rows are genuinely separate work before applying.",
+                    )
+                )
+    return flags
+
+
 def _build_review_queue(
     matched_rows: list[PreviewMatchedRow],
     unmatched_items: list[PreviewUnmatchedItem],
@@ -1577,6 +1645,7 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
     indicative_range = _build_indicative_range(
         matched_rows, unmatched_items, custom_priced_rows
     )
+    duplicate_flags = _build_duplicate_flags(matched_rows)
 
     return PreviewResponse(
         summary_text=summary_text,
@@ -1604,6 +1673,7 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
             normalized_scope_used=input_mode == "normalized",
         ),
         indicative_range=indicative_range,
+        duplicate_flags=duplicate_flags,
         error_text="",
     )
 
@@ -1881,6 +1951,7 @@ def _generate_llm_preview(
     indicative_range = _build_indicative_range(
         matched_rows, unmatched_items, custom_priced_rows
     )
+    duplicate_flags = _build_duplicate_flags(matched_rows)
 
     return PreviewResponse(
         summary_text=summary_text,
@@ -1910,6 +1981,7 @@ def _generate_llm_preview(
             normalized_scope_used=input_mode == "normalized",
         ),
         indicative_range=indicative_range,
+        duplicate_flags=duplicate_flags,
         error_text="",
     )
 

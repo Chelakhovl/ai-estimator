@@ -510,6 +510,24 @@ class PreviewIndicativeRange(BaseModel):
     basis: str
 
 
+class PreviewDuplicateFlag(BaseModel):
+    """Two DIFFERENT matched rows that look like the same work counted twice in
+    the same room/section - e.g. two variants of "strip out kitchen" both
+    matched for the same area. Distinct from the existing used_ids dedup in
+    matcher.py, which only catches the model picking the exact same catalog row
+    id twice, not two different rows describing overlapping scope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    row_a_guid: str
+    row_b_guid: str
+    row_a_title: str
+    row_b_title: str
+    similarity: float = Field(ge=0, le=1)
+    scope_label: str = ""
+    suggested_action: str
+
+
 class PreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -529,6 +547,7 @@ class PreviewResponse(BaseModel):
         default_factory=PreviewCoverageSummary
     )
     indicative_range: PreviewIndicativeRange | None = None
+    duplicate_flags: list[PreviewDuplicateFlag] = Field(default_factory=list)
     error_text: str = ""
 
 
