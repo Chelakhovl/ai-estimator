@@ -78,6 +78,43 @@ def test_preview_contract_returns_expected_shape(monkeypatch) -> None:
     assert all(prompt.title for prompt in response.coverage_prompts)
 
 
+def test_preview_matched_rows_include_source_snippet_when_derivable(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("OPENAI_MODEL", "")
+    reload(app_config)
+    reload(app_llm_client)
+    reload(app_matcher)
+
+    request = PreviewRequest(
+        quote_guid="quote-1",
+        prompt="Kitchen renovation, paint walls 120 m2",
+        candidate_rows=[
+            {
+                "INSIDEQUOTESGUID": "inside-1",
+                "WORKGUID": "work-1",
+                "WorkName": "Paint walls",
+                "Unit": "m2",
+                "WorkLabourCost": 10,
+                "WorkMatCost": 4,
+                "WorkOtherCost": 1,
+                "WorkQTYforNorm": 1,
+                "PROFIT": 20,
+                "LabourMarkup": 15,
+                "MaterialMarkup": 10,
+            }
+        ],
+    )
+
+    response = generate_preview(request)
+
+    assert len(response.matched_rows) == 1
+    snippet = response.matched_rows[0].SourceSnippet
+    assert snippet is not None
+    assert "paint walls" in snippet.lower()
+
+
 def test_preview_without_llm_config_fails_fast_outside_local_or_test(
     monkeypatch,
 ) -> None:

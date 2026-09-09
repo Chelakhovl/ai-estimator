@@ -141,6 +141,11 @@ class PreviewMatchedRow(BaseModel):
     Confidence: float = Field(ge=0, le=1)
     NeedsReview: bool = False
     ReviewReason: str | None = None
+    # The literal line from the scope/prompt this row was derived from, shown next
+    # to the row so the estimator can see exactly why it appeared without re-reading
+    # the whole prompt. Best-effort - None when nothing scores well enough, never a
+    # fabricated quote (see matcher._find_source_snippet / _resolve_source_snippet).
+    SourceSnippet: str | None = None
     MatchedSectionKey: str | None = None
     MatchedSectionTitle: str | None = None
     MatchedSectionOrder: int | None = None
@@ -548,6 +553,10 @@ class LLMPreviewMatchedRow(BaseModel):
     Confidence: float | None = None
     NeedsReview: bool | None = None
     ReviewReason: str | None = None
+    # Optional: the model's own quote of the prompt line this row came from. Cross-
+    # checked against the actual prompt before being trusted (see
+    # matcher._looks_like_valid_source_snippet) - never shown to the user unverified.
+    SourceSnippet: str | None = None
 
 
 class LLMPreviewOutput(BaseModel):

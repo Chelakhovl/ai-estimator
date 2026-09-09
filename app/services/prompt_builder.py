@@ -285,6 +285,7 @@ Matching rules:
 - If guardrail_code is do_not_include, do not select that row.
 - If guardrail_code indicates specialist review, allowance, external pricing, or user-provided amount, you may still select the row when it clearly applies, but you must set NeedsReview: true and explain why in ReviewReason.
 - If the user did not explicitly request profit or markup changes, return PROFIT, LabourMarkup, and MaterialMarkup as null.
+- For SourceSnippet, quote the exact line from the prompt that this row is derived from, verbatim - do not paraphrase, summarise, or invent a quote. If no single line in the prompt directly supports the row (e.g. it came entirely from scope_summary or document_context), return null rather than guessing.
 - Do not calculate client prices.
 - Do not return markdown.
 - Do not add any fields outside the required JSON structure.
@@ -316,7 +317,8 @@ Example output:
       "MaterialMarkup": null,
       "Confidence": 0.93,
       "NeedsReview": false,
-      "ReviewReason": null
+      "ReviewReason": null,
+      "SourceSnippet": "Lay engineered timber floor to kitchen"
     },
     {
       "INSIDEQUOTESGUID": "abc-2",
@@ -327,7 +329,8 @@ Example output:
       "MaterialMarkup": null,
       "Confidence": 0.96,
       "NeedsReview": false,
-      "ReviewReason": null
+      "ReviewReason": null,
+      "SourceSnippet": "Kitchen: 8 downlights"
     },
     {
       "INSIDEQUOTESGUID": "abc-3",
@@ -338,7 +341,8 @@ Example output:
       "MaterialMarkup": null,
       "Confidence": 0.95,
       "NeedsReview": false,
-      "ReviewReason": null
+      "ReviewReason": null,
+      "SourceSnippet": "Kitchen: 6 double sockets"
     }
   ],
   "unmatched_items": [],
@@ -550,7 +554,8 @@ Example output:
       "MaterialMarkup": null,
       "Confidence": 0.7,
       "NeedsReview": true,
-      "ReviewReason": "Gas Safe registered engineer required. Confirm pricing separately."
+      "ReviewReason": "Gas Safe registered engineer required. Confirm pricing separately.",
+      "SourceSnippet": "Install new gas boiler"
     },
     {
       "INSIDEQUOTESGUID": "rad-01",
@@ -561,7 +566,8 @@ Example output:
       "MaterialMarkup": null,
       "Confidence": 0.91,
       "NeedsReview": false,
-      "ReviewReason": null
+      "ReviewReason": null,
+      "SourceSnippet": "Install radiators throughout"
     },
     {
       "INSIDEQUOTESGUID": "rewire-01",
@@ -572,7 +578,8 @@ Example output:
       "MaterialMarkup": null,
       "Confidence": 0.68,
       "NeedsReview": true,
-      "ReviewReason": "Specialist electrical contractor review required. Scope is partial rewire ground floor only, so confirm exact extent."
+      "ReviewReason": "Specialist electrical contractor review required. Scope is partial rewire ground floor only, so confirm exact extent.",
+      "SourceSnippet": "Partial rewire to ground floor only"
     }
   ],
   "unmatched_items": [
@@ -607,7 +614,8 @@ Return exactly this JSON object shape:
       "MaterialMarkup": "number or null",
       "Confidence": "number or null",
       "NeedsReview": "boolean or null",
-      "ReviewReason": "string or null"
+      "ReviewReason": "string or null",
+      "SourceSnippet": "string or null - quote the exact line from the prompt this row came from, verbatim, so the estimator can see why it appeared. Leave null rather than paraphrasing or inventing a quote if nothing in the prompt directly supports this row."
     }
   ],
   "unmatched_items": [

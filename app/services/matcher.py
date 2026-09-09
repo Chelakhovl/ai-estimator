@@ -267,6 +267,82 @@ def _build_scope_support_tokens(scope_text: str, extracted_scope) -> set[str]:
     return _significant_support_tokens(" ".join(part for part in scope_parts if part))
 
 
+_SOURCE_SNIPPET_MIN_OVERLAP = 2
+_SOURCE_SNIPPET_MIN_LLM_OVERLAP_RATIO = 0.6
+
+
+def _find_source_snippet(
+    row_name: str,
+    area_hint: str,
+    *,
+    scope_text: str,
+    extracted_scope,
+) -> str | None:
+    """Best-effort: find the line in the scope text that most likely describes this
+    row, so the estimator can see exactly why it appeared without re-reading the
+    whole prompt. Returns None rather than fabricating a citation when nothing
+    scores well enough - a missing citation is honest, a wrong one is worse than none."""
+    row_tokens = _significant_support_tokens(f"{row_name} {area_hint}")
+    if not row_tokens:
+        return None
+
+    candidate_lines: list[str] = []
+    if extracted_scope is not None:
+        for section in extracted_scope.sections:
+            candidate_lines.extend(section.lines)
+            candidate_lines.extend(item.raw_text for item in section.count_items)
+            candidate_lines.extend(item.raw_text for item in section.measure_items)
+            candidate_lines.extend(item.raw_text for item in section.dimension_items)
+    if not candidate_lines and scope_text:
+        candidate_lines = [
+            line.strip() for line in re.split(r"[\n.;]+", scope_text) if line.strip()
+        ]
+
+    best_line: str | None = None
+    best_overlap = 0
+    for line in candidate_lines:
+        line_tokens = _significant_support_tokens(line)
+        if not line_tokens:
+            continue
+        overlap = len(row_tokens & line_tokens)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_line = line
+
+    required_overlap = min(_SOURCE_SNIPPET_MIN_OVERLAP, len(row_tokens))
+    if best_line and best_overlap >= required_overlap:
+        return best_line.strip()
+    return None
+
+
+def _looks_like_valid_source_snippet(candidate: str | None, scope_text: str) -> bool:
+    """Reject an LLM-reported SourceSnippet that doesn't actually look like it came
+    from the prompt - guards against a hallucinated quote presented as a citation."""
+    if not candidate or not candidate.strip():
+        return False
+    candidate_tokens = _significant_support_tokens(candidate)
+    if not candidate_tokens:
+        return False
+    scope_tokens = _significant_support_tokens(scope_text)
+    overlap_ratio = len(candidate_tokens & scope_tokens) / len(candidate_tokens)
+    return overlap_ratio >= _SOURCE_SNIPPET_MIN_LLM_OVERLAP_RATIO
+
+
+def _resolve_source_snippet(
+    *,
+    llm_reported: str | None,
+    row_name: str,
+    area_hint: str,
+    scope_text: str,
+    extracted_scope,
+) -> str | None:
+    if llm_reported and _looks_like_valid_source_snippet(llm_reported, scope_text):
+        return llm_reported.strip()
+    return _find_source_snippet(
+        row_name, area_hint, scope_text=scope_text, extracted_scope=extracted_scope
+    )
+
+
 def _has_direct_scope_support(
     row: CandidateRow,
     *,
@@ -784,6 +860,7 @@ def _build_preview_row_from_candidate(
     matched_section_key: str | None = None,
     matched_section_title: str | None = None,
     matched_section_order: int | None = None,
+    source_snippet: str | None = None,
 ) -> PreviewMatchedRow:
     client_cost_per_unit = resolve_client_cost_per_unit(
         is_fixed_rate=row.IsFixedRate,
@@ -817,6 +894,7 @@ def _build_preview_row_from_candidate(
         Confidence=round(confidence, 2),
         NeedsReview=needs_review,
         ReviewReason=review_reason,
+        SourceSnippet=source_snippet,
         MatchedSectionKey=matched_section_key,
         MatchedSectionTitle=matched_section_title,
         MatchedSectionOrder=matched_section_order,
@@ -1368,6 +1446,12 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
             matched_section_key=section_match.key if section_match else None,
             matched_section_title=section_match.title if section_match else None,
             matched_section_order=section_match.order if section_match else None,
+            source_snippet=_find_source_snippet(
+                row.WorkName,
+                resolved_area,
+                scope_text=segment,
+                extracted_scope=extracted_scope,
+            ),
         )
         assumptions.extend(
             _apply_hourly_unit_review(
@@ -1636,6 +1720,13 @@ def _generate_llm_preview(
                     matched_row.MatchedSectionKey = section_match.key
                     matched_row.MatchedSectionTitle = section_match.title
                     matched_row.MatchedSectionOrder = section_match.order
+        matched_row.SourceSnippet = _resolve_source_snippet(
+            llm_reported=llm_row.SourceSnippet,
+            row_name=matched_row.WorkName,
+            area_hint=" ".join(filter(None, [llm_row.AREA, matched_row.WorkName])),
+            scope_text=source_prompt,
+            extracted_scope=extracted_scope,
+        )
         if candidate and not _has_direct_scope_support(
             candidate,
             scope_text=source_prompt,
