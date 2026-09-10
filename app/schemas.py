@@ -954,6 +954,7 @@ class CalculatorParseResponse(BaseModel):
     location: dict[str, str] = Field(default_factory=dict)
     uncertain: list[str] = Field(default_factory=list)
     summary: str = ""
+    understood: bool = True  # false = not a building/renovation project description
     service_mode: str = "mock"  # "real" | "mock"
 
 
@@ -982,6 +983,7 @@ class LLMCalculatorParseOutput(BaseModel):
     location: list[LLMLocationGuess] = Field(default_factory=list)
     uncertain: list[str] = Field(default_factory=list)
     summary: str = ""
+    understood: bool = True
 
 
 class CalculatorExplainRequest(BaseModel):
