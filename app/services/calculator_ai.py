@@ -76,7 +76,7 @@ AREA_FIELDS: frozenset[str] = frozenset(AREA_FIELD_BY_TYPE.values()) | {
 
 # Yes/No option toggles the client can meaningfully mention up front.
 OPTION_FIELDS: tuple[str, ...] = (
-    "is_new_kitchen",
+    "is_kitchen_fitting",
     "is_bathrooms",
     "is_remove_chimney",
     "is_boiler",
@@ -218,7 +218,7 @@ def _parse_mock(text: str) -> CalculatorParseResponse:
 
     options: dict[str, bool] = {}
     if "kitchen" in low:
-        options["is_new_kitchen"] = True
+        options["is_kitchen_fitting"] = True
     if "bathroom" in low or "en-suite" in low or "ensuite" in low:
         options["is_bathrooms"] = True
     if "underfloor" in low and "electric" in low:
