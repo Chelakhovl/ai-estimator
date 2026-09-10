@@ -934,3 +934,81 @@ class LLMBatchCorrectionsOutput(BaseModel):
 
     patches: list[LLMCorrectionPatch]
     unresolved: list[str]
+
+
+# --- Public calculator AI (combit-construction.com/calculator/) ---------------
+
+
+class CalculatorParseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class CalculatorParseResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_types: list[str] = Field(default_factory=list)
+    areas: dict[str, float] = Field(default_factory=dict)
+    options: dict[str, bool] = Field(default_factory=dict)
+    location: dict[str, str] = Field(default_factory=dict)
+    uncertain: list[str] = Field(default_factory=list)
+    summary: str = ""
+    service_mode: str = "mock"  # "real" | "mock"
+
+
+class LLMAreaGuess(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    sqm: float
+
+
+class LLMLocationGuess(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    value: str
+
+
+class LLMCalculatorParseOutput(BaseModel):
+    """Internal structured output for the parse prompt (not exposed directly)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_types: list[str] = Field(default_factory=list)
+    areas: list[LLMAreaGuess] = Field(default_factory=list)
+    options: list[str] = Field(default_factory=list)
+    location: list[LLMLocationGuess] = Field(default_factory=list)
+    uncertain: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class CalculatorExplainRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_types: list[str] = Field(default_factory=list, max_length=20)
+    location: dict[str, str] = Field(default_factory=dict)
+    options: dict[str, bool] = Field(default_factory=dict)
+    totals: dict[str, float] = Field(default_factory=dict)
+    floor_areas: dict[str, float] = Field(default_factory=dict)
+
+
+class CalculatorExplainResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    included: list[str] = Field(default_factory=list)
+    excluded: list[str] = Field(default_factory=list)
+    cost_drivers: list[str] = Field(default_factory=list)
+    disclaimer: str = ""
+    service_mode: str = "mock"  # "real" | "mock"
+
+
+class LLMCalculatorExplainOutput(BaseModel):
+    """Internal structured output for the explain prompt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    included: list[str] = Field(default_factory=list)
+    excluded: list[str] = Field(default_factory=list)
+    cost_drivers: list[str] = Field(default_factory=list)
