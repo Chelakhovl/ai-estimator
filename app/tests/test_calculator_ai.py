@@ -51,7 +51,7 @@ def test_parse_mock_recognises_types_and_options():
         "Rear extension about 25m2, new kitchen and underfloor heating, conservation area"
     )
     assert "Back extension" in r.project_types
-    assert r.options.get("is_new_kitchen") is True
+    assert r.options.get("is_kitchen_fitting") is True
     assert r.options.get("is_ufh_water") is True
     assert r.location.get("area") == "Conservation"
     assert r.service_mode == "mock"
