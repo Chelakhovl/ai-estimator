@@ -1014,3 +1014,32 @@ class LLMCalculatorExplainOutput(BaseModel):
     included: list[str] = Field(default_factory=list)
     excluded: list[str] = Field(default_factory=list)
     cost_drivers: list[str] = Field(default_factory=list)
+
+
+class CalculatorAskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=500)
+    project_types: list[str] = Field(default_factory=list, max_length=20)
+    location: dict[str, str] = Field(default_factory=dict)
+    options: dict[str, bool] = Field(default_factory=dict)
+    totals: dict[str, float] = Field(default_factory=dict)
+
+
+class CalculatorAskResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = ""
+    deflected: bool = (
+        False  # true = we declined (asked for a detailed quote / off-topic)
+    )
+    service_mode: str = "mock"  # "real" | "mock"
+
+
+class LLMCalculatorAskOutput(BaseModel):
+    """Internal structured output for the ask prompt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str = ""
+    deflected: bool = False
