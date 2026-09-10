@@ -6,10 +6,13 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.calculator_ai import (
+    CalculatorAskRequest,
     CalculatorExplainRequest,
+    _ask_mock,
     _clean_bullet,
     _explain_mock,
     _parse_mock,
+    _sanitise_answer,
     _sanitise_explain,
 )
 
@@ -155,3 +158,91 @@ def test_explain_endpoint_mock(monkeypatch):
     assert "£" not in " ".join(
         body["included"] + body["excluded"] + body["cost_drivers"]
     )
+
+
+# ---- ask (guardrails + mock) -------------------------------------------------
+
+
+def test_sanitise_answer_rejects_price_hours_and_worklists():
+    assert _sanitise_answer("Planning is usually straightforward here.") == (
+        "Planning is usually straightforward here."
+    )
+    assert _sanitise_answer("Budget about £2,000 for that.") == ""
+    assert _sanitise_answer("Allow 12 hours for the electrician.") == ""
+    assert _sanitise_answer("Your project needs:\n1. strip out\n2. new roof") == ""
+    assert _sanitise_answer("- demolish\n- rebuild\n- fit out") == ""
+    assert _sanitise_answer("   ") == ""
+
+
+def test_sanitise_answer_caps_length():
+    long = " ".join(["word"] * 120)
+    out = _sanitise_answer(long)
+    assert out.endswith("…")
+    assert len(out.split()) <= 71
+
+
+def test_ask_mock_answers_planning_question():
+    r = _ask_mock(
+        CalculatorAskRequest(
+            question="Do I need planning permission for a rear extension?",
+            project_types=["Back extension"],
+        )
+    )
+    assert r.deflected is False
+    assert r.service_mode == "mock"
+    assert "£" not in r.answer
+    assert "combit" in r.answer.lower()
+
+
+def test_ask_mock_deflects_detailed_quote_request():
+    r = _ask_mock(
+        CalculatorAskRequest(
+            question="Can you give me an itemised breakdown of every cost?"
+        )
+    )
+    assert r.deflected is True
+    assert "£" not in r.answer
+
+
+# ---- ask endpoint (mock mode) ---------------------------------------------------
+
+
+def test_ask_endpoint_requires_api_key(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/ask", json={"question": "how long does a loft take?"}
+    )
+    assert resp.status_code == 401
+
+
+def test_ask_endpoint_mock(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/ask",
+        json={
+            "question": "How long will a dormer loft take?",
+            "project_types": ["Dormer loft conversion"],
+            "location": {"location": "Inner London"},
+            "options": {},
+            "totals": {"total": 78000.0},
+        },
+        headers={"x-api-key": "test-secret"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer"]
+    assert body["deflected"] is False
+    assert body["service_mode"] == "mock"
+    assert "£" not in body["answer"]
+
+
+def test_ask_endpoint_deflects_scope_request(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/ask",
+        json={"question": "Please write a full scope of works for my project"},
+        headers={"x-api-key": "test-secret"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deflected"] is True

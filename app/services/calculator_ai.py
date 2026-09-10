@@ -18,9 +18,12 @@ from time import perf_counter
 
 from app.config import settings
 from app.schemas import (
+    CalculatorAskRequest,
+    CalculatorAskResponse,
     CalculatorExplainRequest,
     CalculatorExplainResponse,
     CalculatorParseResponse,
+    LLMCalculatorAskOutput,
     LLMCalculatorExplainOutput,
     LLMCalculatorParseOutput,
 )
@@ -422,3 +425,155 @@ def _dump_context(context: dict) -> str:
     import json
 
     return json.dumps(context, ensure_ascii=False, indent=2)
+
+
+# ---- ask_project --------------------------------------------------------------
+
+_ASK_SYSTEM = """You answer ONE quick question from a UK homeowner using a free building-cost
+calculator, on behalf of Combit — a London refurbishment contractor. Reply in English.
+
+Keep it to 2-3 short sentences, max ~55 words, plain and friendly. Use their project
+details for relevance. Draw on general UK renovation knowledge (planning permission,
+permitted development, party wall, building control, typical timelines, sequencing,
+what "conservation area" or "listed" means in practice, VAT, what a ballpark rate
+usually covers).
+
+Hard limits:
+- NEVER give a pounds figure, a price, or any cost breakdown.
+- NEVER produce a scope of works, a task list, or "your project needs: 1)... 2)...".
+- NEVER give design dimensions or tell them how to design anything.
+- If they ask for a detailed quote / itemised estimate / scope of works, or the
+  question is not about their building project, set `deflected` to true and answer
+  with ONE line: that's best covered on a call with Combit — leave your details below
+  and the team will come back to you.
+- Otherwise set `deflected` to false, answer the question, and end with a short nudge
+  to book a call or send their details to Combit for a firm answer.
+"""
+
+_ASK_DEFLECT = (
+    "That's best covered on a call with Combit — leave your details below and the "
+    "team will get back to you."
+)
+
+# a numbered/bulleted work list is a scope of works — not allowed out of this endpoint
+_WORK_LIST = re.compile(r"(^|\n)\s*(\d+[.)]\s|[-*•]\s)", re.MULTILINE)
+
+
+def _sanitise_answer(text: str) -> str:
+    """Collapse whitespace, cap length, and refuse anything that leaks a price or a
+    scope-of-works list. Returns "" when the answer must be replaced with a deflect."""
+    t = " ".join(str(text).split())
+    if not t:
+        return ""
+    if _MONEY_PER_ITEM.search(t) or _HOURS.search(t) or _WORK_LIST.search(str(text)):
+        return ""
+    words = t.split()
+    if len(words) > 70:  # hard cap regardless of the prompt
+        t = " ".join(words[:70]).rstrip(",.;:") + "…"
+    return t
+
+
+def _ask_mock(req: CalculatorAskRequest) -> CalculatorAskResponse:
+    q = req.question.lower()
+    detailed = any(
+        w in q
+        for w in (
+            "detailed quote",
+            "itemised",
+            "itemized",
+            "scope of works",
+            "full estimate",
+            "breakdown",
+            "line by line",
+        )
+    )
+    if detailed:
+        return CalculatorAskResponse(
+            answer=_ASK_DEFLECT, deflected=True, service_mode="mock"
+        )
+
+    if "planning" in q or "permitted development" in q:
+        a = (
+            "Many extensions and loft conversions fall under permitted development, but a "
+            "conservation area or a listed building usually needs a full application. Combit "
+            "can confirm what yours needs — send your details below."
+        )
+    elif "how long" in q or "timeline" in q or "take" in q:
+        a = (
+            "A typical single-storey extension or loft runs roughly 10-16 weeks on site once "
+            "you have drawings and approvals; design and planning add time before that. Book a "
+            "call with Combit for a schedule for your project."
+        )
+    elif "vat" in q:
+        a = (
+            "The calculator figure is shown excluding VAT. Most refurbishment work is charged "
+            "at 20%, though some conversions can qualify for a reduced rate — Combit can advise "
+            "for your case."
+        )
+    elif "conservation" in q:
+        a = (
+            "A conservation area mainly restricts what's visible from the street — materials, "
+            "window styles, roof form — and tends to add cost and a planning application. "
+            "Combit can talk you through it."
+        )
+    elif "listed" in q:
+        a = (
+            "A listed building needs listed building consent for most changes and specialist "
+            "work, so budgets and timelines are higher. Combit handles listed properties — get "
+            "in touch to discuss yours."
+        )
+    else:
+        a = (
+            "Good question — the calculator gives a ballpark only, so the reliable answer is a "
+            "quick call with Combit. Leave your details below and the team will come back to you."
+        )
+    return CalculatorAskResponse(answer=a, deflected=False, service_mode="mock")
+
+
+def ask_project(req: CalculatorAskRequest) -> CalculatorAskResponse:
+    if not settings.openai_api_key or not settings.openai_model:
+        return _ask_mock(req)
+
+    context = {
+        "project_types": req.project_types,
+        "location": req.location,
+        "options_selected": [k for k, v in req.options.items() if v],
+        "ballpark_total_shown": req.totals.get("total"),
+    }
+    try:
+        client = _openai_client()
+        started = perf_counter()
+        completion = client.beta.chat.completions.parse(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": _ASK_SYSTEM},
+                {
+                    "role": "user",
+                    "content": "Project context:\n"
+                    + _dump_context(context)
+                    + "\n\nQuestion:\n"
+                    + req.question.strip(),
+                },
+            ],
+            response_format=LLMCalculatorAskOutput,
+        )
+        parsed = completion.choices[0].message.parsed
+        if parsed is None:
+            raise CalculatorAIUnavailable("no structured output")
+        logger.info(
+            "calculator ask_project ok in %dms", int((perf_counter() - started) * 1000)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("calculator ask_project failed (%s) — using mock", exc)
+        return _ask_mock(req)
+
+    answer = _sanitise_answer(parsed.answer)
+    if not answer:
+        # a guardrail tripped (price / hours / work list) — deflect rather than mock,
+        # so we never ship a stripped or misleading reply
+        return CalculatorAskResponse(
+            answer=_ASK_DEFLECT, deflected=True, service_mode="real"
+        )
+    return CalculatorAskResponse(
+        answer=answer, deflected=bool(parsed.deflected), service_mode="real"
+    )
