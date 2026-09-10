@@ -54,13 +54,22 @@ def test_parse_mock_recognises_types_and_options():
     assert r.options.get("is_kitchen_fitting") is True
     assert r.options.get("is_ufh_water") is True
     assert r.location.get("area") == "Conservation"
+    assert r.understood is True
     assert r.service_mode == "mock"
 
 
-def test_parse_mock_no_type_flags_uncertain():
-    r = _parse_mock("hello please help")
+def test_parse_mock_off_topic_marks_not_understood():
+    r = _parse_mock("hello, what's the weather today?")
     assert r.project_types == []
-    assert r.uncertain
+    assert r.understood is False
+    assert r.summary == ""
+    assert r.uncertain == []
+
+
+def test_parse_mock_location_only_is_understood():
+    r = _parse_mock("listed building in a conservation area, Inner London")
+    assert r.project_types == []
+    assert r.understood is True
 
 
 # ---- mock explain ----------------------------------------------------------------
@@ -109,7 +118,21 @@ def test_parse_endpoint_mock(monkeypatch):
     assert "Dormer loft conversion" in body["project_types"]
     assert body["options"].get("is_bathrooms") is True
     assert body["location"].get("listed_building") == "Yes"
+    assert body["understood"] is True
     assert body["service_mode"] == "mock"
+
+
+def test_parse_endpoint_off_topic(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/parse-project",
+        json={"text": "can you tell me a joke"},
+        headers={"x-api-key": "test-secret"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["understood"] is False
+    assert body["project_types"] == []
 
 
 def test_explain_endpoint_mock(monkeypatch):
