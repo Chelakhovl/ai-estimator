@@ -127,6 +127,26 @@ class TestFindSourceSnippetFromRawPrompt:
 
         assert result is None
 
+    def test_returns_none_rather_than_quoting_the_entire_prompt(self):
+        # Regression: when room extraction fails and the prompt is one long
+        # run-on sentence with no '.', ';' or newline to split on, the raw-prompt
+        # fallback used to produce exactly one "line" - the whole prompt - which
+        # trivially had the highest token overlap and was returned as the
+        # "citation", defeating the point of a short quote in the most common
+        # degraded case (no room sizes found).
+        prompt = (
+            "Strip out the existing kitchen units and worktops throughout the "
+            "ground floor and install new radiators in every room including the "
+            "hallway and the lounge and the dining room before redecorating "
+            "and also replastering every wall that gets disturbed along the way"
+        )
+
+        result = _find_source_snippet(
+            "Strip out kitchen", "", scope_text=prompt, extracted_scope=None
+        )
+
+        assert result is None
+
 
 class TestLooksLikeValidSourceSnippet:
     def test_accepts_a_snippet_that_substantially_overlaps_the_prompt(self):
@@ -152,6 +172,24 @@ class TestLooksLikeValidSourceSnippet:
     def test_rejects_blank_snippet(self):
         assert _looks_like_valid_source_snippet(None, "anything") is False
         assert _looks_like_valid_source_snippet("   ", "anything") is False
+
+    def test_rejects_a_sentence_stitched_from_scattered_real_words(self):
+        # Regression: a bag-of-words overlap check can be fooled by a sentence
+        # built out of real words that appear somewhere in the prompt but were
+        # never actually adjacent - it isn't a quote just because every word in
+        # it happens to exist somewhere in the source text.
+        prompt = (
+            "ELECTRICAL: Partial rewire to ground floor only. "
+            "PLUMBING: Replace the boiler in the loft. "
+            "DECORATING: Paint the hallway ceiling white."
+        )
+        fabricated = "Paint the boiler ground floor ceiling only ground rewire"
+
+        assert _looks_like_valid_source_snippet(fabricated, prompt) is False
+
+    def test_rejects_candidate_longer_than_the_max_snippet_length(self):
+        prompt = "A" * 500
+        assert _looks_like_valid_source_snippet("A" * 300, prompt) is False
 
 
 class TestResolveSourceSnippet:

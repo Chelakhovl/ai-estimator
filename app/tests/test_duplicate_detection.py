@@ -123,9 +123,14 @@ class TestBuildDuplicateFlags:
         assert len(flags) == 1
         assert {flags[0].row_a_guid, flags[0].row_b_guid} == {"row-1", "row-2"}
 
-    def test_ungrouped_rows_with_no_area_or_section_still_compare_within_that_bucket(
-        self,
-    ):
+    def test_does_not_flag_ungrouped_rows_against_each_other(self):
+        # Regression: rows with neither MatchedSectionKey nor AREA used to all
+        # fall into one shared "_ungrouped" bucket and get compared against each
+        # other - directly contradicting this function's own docstring, which
+        # promises grouping "never compares unrelated rows from opposite ends of
+        # the quote". Two generic, room-less lines (e.g. Preliminaries) that
+        # happen to have similar wording must not be flagged as duplicates just
+        # because neither one has a room assigned.
         rows = [
             _matched_row(guid="row-1", work_name="Strip out kitchen units", area=""),
             _matched_row(
@@ -133,7 +138,25 @@ class TestBuildDuplicateFlags:
             ),
         ]
 
+        assert _build_duplicate_flags(rows) == []
+
+    def test_still_flags_duplicates_sharing_a_section_key_even_without_area(self):
+        rows = [
+            _matched_row(
+                guid="row-1",
+                work_name="Strip out kitchen units",
+                area="",
+                matched_section_key="kitchen-strip-out",
+            ),
+            _matched_row(
+                guid="row-2",
+                work_name="Strip out existing kitchen units",
+                area="",
+                matched_section_key="kitchen-strip-out",
+            ),
+        ]
+
         flags = _build_duplicate_flags(rows)
 
         assert len(flags) == 1
-        assert flags[0].scope_label == ""
+        assert flags[0].scope_label == "kitchen-strip-out"

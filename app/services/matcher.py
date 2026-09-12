@@ -273,7 +273,20 @@ def _build_scope_support_tokens(scope_text: str, extracted_scope) -> set[str]:
 
 
 _SOURCE_SNIPPET_MIN_OVERLAP = 2
-_SOURCE_SNIPPET_MIN_LLM_OVERLAP_RATIO = 0.6
+# A citation is meant to be a single short line an estimator can scan at a
+# glance next to the row - not the whole prompt. When extraction produced no
+# sections/lines, _find_source_snippet falls back to splitting the raw prompt
+# on sentence boundaries; if the prompt has none (one long run-on sentence),
+# that fallback yields exactly one "line" equal to the whole prompt, which
+# would trivially score highest and get returned as the "citation". Reject
+# anything this long rather than quote the entire prompt back at the estimator.
+_SOURCE_SNIPPET_MAX_LENGTH = 200
+
+
+def _normalize_for_substring_check(value: str) -> str:
+    """Lowercase and collapse whitespace/punctuation so near-identical text
+    compares equal regardless of minor formatting differences."""
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
 def _find_source_snippet(
@@ -315,22 +328,32 @@ def _find_source_snippet(
             best_line = line
 
     required_overlap = min(_SOURCE_SNIPPET_MIN_OVERLAP, len(row_tokens))
-    if best_line and best_overlap >= required_overlap:
+    if (
+        best_line
+        and best_overlap >= required_overlap
+        and len(best_line) <= _SOURCE_SNIPPET_MAX_LENGTH
+    ):
         return best_line.strip()
     return None
 
 
 def _looks_like_valid_source_snippet(candidate: str | None, scope_text: str) -> bool:
     """Reject an LLM-reported SourceSnippet that doesn't actually look like it came
-    from the prompt - guards against a hallucinated quote presented as a citation."""
+    from the prompt - guards against a hallucinated quote presented as a citation.
+
+    Requires the (normalized) candidate to actually appear as a substring of the
+    prompt. A bag-of-words overlap check isn't enough here: the LLM could stitch a
+    plausible-sounding sentence out of real words scattered across the prompt and
+    still pass a token-overlap threshold without ever having "quoted" anything."""
     if not candidate or not candidate.strip():
         return False
-    candidate_tokens = _significant_support_tokens(candidate)
-    if not candidate_tokens:
+    if len(candidate) > _SOURCE_SNIPPET_MAX_LENGTH:
         return False
-    scope_tokens = _significant_support_tokens(scope_text)
-    overlap_ratio = len(candidate_tokens & scope_tokens) / len(candidate_tokens)
-    return overlap_ratio >= _SOURCE_SNIPPET_MIN_LLM_OVERLAP_RATIO
+    normalized_candidate = _normalize_for_substring_check(candidate)
+    if not normalized_candidate:
+        return False
+    normalized_scope = _normalize_for_substring_check(scope_text)
+    return normalized_candidate in normalized_scope
 
 
 def _resolve_source_snippet(
@@ -1213,9 +1236,15 @@ def _build_duplicate_flags(
     don't false-positive on the string ratio alone."""
     groups: dict[str, list[PreviewMatchedRow]] = {}
     for row in matched_rows:
-        key = (
-            row.MatchedSectionKey or (row.AREA or "").strip().lower()
-        ) or "_ungrouped"
+        key = row.MatchedSectionKey or (row.AREA or "").strip().lower()
+        if not key:
+            # No section/area to group by - give each such row its own key so it's
+            # never compared against another ungrouped row. Bucketing every
+            # ungrouped row together would compare unrelated rows from opposite
+            # ends of the quote just because neither happened to have an AREA,
+            # which is exactly what the section/area grouping above is meant to
+            # prevent (e.g. generic Preliminaries lines with no room assigned).
+            key = f"_ungrouped:{row.INSIDEQUOTESGUID}"
         groups.setdefault(key, []).append(row)
 
     flags: list[PreviewDuplicateFlag] = []
@@ -1246,7 +1275,9 @@ def _build_duplicate_flags(
                         row_a_title=row_a.WorkName,
                         row_b_title=row_b.WorkName,
                         similarity=round(similarity, 2),
-                        scope_label="" if scope_label == "_ungrouped" else scope_label,
+                        scope_label=""
+                        if scope_label.startswith("_ungrouped:")
+                        else scope_label,
                         suggested_action="Keep whichever better matches the scope, or confirm both rows are genuinely separate work before applying.",
                     )
                 )
@@ -1325,11 +1356,9 @@ def _run_double_read(
             row.Corroborated = False
             only_in_first_pass_count += 1
             continue
-        quantity_diff_ratio = (
-            abs(second_pass_quantity - row.QUANTITY) / row.QUANTITY
-            if row.QUANTITY
-            else 1.0
-        )
+        # row.QUANTITY is always > 0 here (PreviewMatchedRow enforces QUANTITY:
+        # Field(gt=0)), so this division is always well-defined.
+        quantity_diff_ratio = abs(second_pass_quantity - row.QUANTITY) / row.QUANTITY
         if quantity_diff_ratio <= _DOUBLE_READ_QUANTITY_TOLERANCE:
             row.Corroborated = True
             corroborated_count += 1
