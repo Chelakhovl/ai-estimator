@@ -238,6 +238,21 @@ def _infer_default_room_level(prompt: str) -> str | None:
     return infer_default_room_level(prompt)
 
 
+# A comma between two digits is almost always a thousands separator inside a
+# money amount ("£35,000") rather than a clause boundary — splitting on it
+# chops the number in half and glues the trailing "000" onto whatever text
+# follows (e.g. turning "...£35,000. Kitchen: 4.5 x 3.2" into a bogus room
+# named "000. Kitchen"), so it is excluded here.
+# A sentence-ending period (period + whitespace + capital letter/digit) is
+# also a clause boundary in free-form prose — without it, a run-on sentence
+# like "...new sink and dishwasher. Bathroom: 2.4 x 1.8" never gets split,
+# and the room regex swallows the previous sentence's tail as part of the
+# room name. A decimal point ("4.5", "£1,831.72") never has whitespace right
+# after it, so requiring that whitespace tells the two apart without needing
+# to inspect what comes before the dot.
+_CLAUSE_SPLIT_RE = re.compile(r"(?<!\d),|,(?!\d)|;|\.\s+(?=[A-Z0-9])")
+
+
 def _split_inline_scope_clauses(
     line: str, current_heading_hint: str | None
 ) -> list[str]:
@@ -246,9 +261,11 @@ def _split_inline_scope_clauses(
         return [line]
     if lowered.startswith(("type:", "property:", "location:")):
         return [line]
-    if "," not in line and ";" not in line:
+    if not _CLAUSE_SPLIT_RE.search(line):
         return [line]
-    split_lines = [part.strip() for part in re.split(r"[;,]", line) if part.strip()]
+    split_lines = [
+        part.strip() for part in _CLAUSE_SPLIT_RE.split(line) if part.strip()
+    ]
     if len(split_lines) <= 1:
         return [line]
     return split_lines
@@ -804,7 +821,7 @@ def _supply_question(prompt: str) -> ClarificationQuestion | None:
                 value="mixed_or_unsure", label="Mixed / unsure"
             ),
         ],
-        applies_to_section="Commercial Settings",
+        applies_to_section="Pricing & responsibility",
     )
 
 
@@ -873,7 +890,7 @@ def _permit_cdm_question(prompt: str) -> ClarificationQuestion | None:
         label="Which permit or CDM costs actually apply, and who is carrying them?",
         reason="Permit / CDM wording was detected, but these costs should not be guessed from standard rates or included until ownership and inclusion are confirmed.",
         answer_type="short_text",
-        applies_to_section="Commercial Settings",
+        applies_to_section="Pricing & responsibility",
     )
 
 
@@ -896,7 +913,7 @@ def _allowance_question(prompt: str) -> ClarificationQuestion | None:
         label="Should the allowance be carried as-is, replaced, or excluded?",
         reason="Allowance wording was detected. The draft should not silently turn that into ordinary internal pricing without an explicit estimator decision.",
         answer_type="short_text",
-        applies_to_section="Commercial Settings",
+        applies_to_section="Pricing & responsibility",
     )
 
 

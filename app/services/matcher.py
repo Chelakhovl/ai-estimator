@@ -1137,10 +1137,14 @@ _INDICATIVE_RANGE_CONFIDENT_THRESHOLD = 0.8
 _INDICATIVE_RANGE_UNMATCHED_HIGH_FACTOR = 0.5
 
 
+_INDICATIVE_RANGE_INCOMPLETE_RATIO = 0.15
+
+
 def _build_indicative_range(
     matched_rows: list[PreviewMatchedRow],
     unmatched_items: list[PreviewUnmatchedItem],
     custom_priced_rows: list[CustomPricedRow],
+    coverage_summary: PreviewCoverageSummary | None = None,
 ) -> PreviewIndicativeRange | None:
     """A confidence-weighted spread of the totals already computed for this
     preview - not a second pricing system. Confident rows (not flagged for
@@ -1202,11 +1206,47 @@ def _build_indicative_range(
             f"{len(unmatched_items)} scope item{'s' if len(unmatched_items) != 1 else ''} unmatched"
         )
 
+    # A missing catalog match per line item is one signal, but a whole scope
+    # section (e.g. plastering, flooring) with zero matched rows is a much
+    # bigger gap than any single unmatched line — count both so a draft that's
+    # "mostly matched by item count" but missing entire sections still gets
+    # flagged as incomplete.
+    priced_row_count = len(matched_rows) + len(custom_priced_rows)
+    total_item_count = priced_row_count + len(unmatched_items)
+    unmatched_item_ratio = (
+        len(unmatched_items) / total_item_count if total_item_count else 0.0
+    )
+
+    missing_section_count = 0
+    missing_section_ratio = 0.0
+    if coverage_summary is not None and coverage_summary.section_count:
+        missing_section_count = max(
+            0, coverage_summary.section_count - coverage_summary.matched_section_count
+        )
+        missing_section_ratio = missing_section_count / coverage_summary.section_count
+    if missing_section_count:
+        basis_parts.append(
+            f"{missing_section_count} scope section"
+            f"{'s' if missing_section_count != 1 else ''} not priced yet"
+        )
+
+    incomplete = (
+        unmatched_item_ratio >= _INDICATIVE_RANGE_INCOMPLETE_RATIO
+        or missing_section_ratio >= _INDICATIVE_RANGE_INCOMPLETE_RATIO
+    )
+    basis = ", ".join(basis_parts) + "."
+    if incomplete:
+        basis = (
+            "Not enough of the scope is priced yet for this number to mean "
+            "much — " + basis
+        )
+
     return PreviewIndicativeRange(
         low=low,
         high=high,
         matched_total=round(matched_total + custom_total, 2),
-        basis=", ".join(basis_parts) + ".",
+        basis=basis,
+        incomplete=incomplete,
     )
 
 
@@ -1770,8 +1810,14 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
     )
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
+    coverage_summary = _build_coverage_summary(
+        matched_rows,
+        unmatched_items,
+        extracted_scope,
+        normalized_scope_used=input_mode == "normalized",
+    )
     indicative_range = _build_indicative_range(
-        matched_rows, unmatched_items, custom_priced_rows
+        matched_rows, unmatched_items, custom_priced_rows, coverage_summary
     )
     duplicate_flags = _build_duplicate_flags(matched_rows)
 
@@ -1794,12 +1840,7 @@ def _generate_mock_preview(request: PreviewRequest) -> PreviewResponse:
             extracted_scope=extracted_scope,
         ),
         warnings=_build_response_warnings(assumptions),
-        coverage_summary=_build_coverage_summary(
-            matched_rows,
-            unmatched_items,
-            extracted_scope,
-            normalized_scope_used=input_mode == "normalized",
-        ),
+        coverage_summary=coverage_summary,
         indicative_range=indicative_range,
         duplicate_flags=duplicate_flags,
         error_text="",
@@ -2076,8 +2117,14 @@ def _generate_llm_preview(
     )
     review_queue = _build_review_queue(matched_rows, unmatched_items, assumptions)
     coverage_prompts = _build_coverage_prompts(unmatched_items, assumptions)
+    coverage_summary = _build_coverage_summary(
+        matched_rows,
+        unmatched_items,
+        extracted_scope,
+        normalized_scope_used=input_mode == "normalized",
+    )
     indicative_range = _build_indicative_range(
-        matched_rows, unmatched_items, custom_priced_rows
+        matched_rows, unmatched_items, custom_priced_rows, coverage_summary
     )
     duplicate_flags = _build_duplicate_flags(matched_rows)
     double_read_summary = (
@@ -2115,12 +2162,7 @@ def _generate_llm_preview(
             accepted_example_count=len(accepted_examples),
         ),
         warnings=_build_response_warnings(assumptions),
-        coverage_summary=_build_coverage_summary(
-            matched_rows,
-            unmatched_items,
-            extracted_scope,
-            normalized_scope_used=input_mode == "normalized",
-        ),
+        coverage_summary=coverage_summary,
         indicative_range=indicative_range,
         duplicate_flags=duplicate_flags,
         double_read_summary=double_read_summary,

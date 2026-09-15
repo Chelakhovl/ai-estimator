@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from app.schemas import CustomPricedRow, PreviewMatchedRow, PreviewUnmatchedItem
+from app.schemas import (
+    CustomPricedRow,
+    PreviewCoverageSummary,
+    PreviewMatchedRow,
+    PreviewUnmatchedItem,
+)
 from app.services.matcher import _build_indicative_range
 
 
@@ -145,3 +150,56 @@ class TestBuildIndicativeRange:
 
         assert result is not None
         assert result.low >= 0
+
+    def test_not_incomplete_when_almost_everything_is_matched(self):
+        rows = [_matched_row(guid=f"row-{i}") for i in range(9)]
+
+        result = _build_indicative_range(
+            rows, [PreviewUnmatchedItem(source_text="x", reason="y")], []
+        )
+
+        assert result is not None
+        assert result.incomplete is False
+
+    def test_incomplete_when_a_large_share_of_items_are_unmatched(self):
+        # This mirrors the real scenario that motivated the flag: a kitchen +
+        # bathroom refurb where big-ticket items (bath install, flooring)
+        # never matched a catalog row, so most of the true cost is missing
+        # even though the £ band itself looks like a normal, precise number.
+        rows = [_matched_row(guid="row-1")]
+
+        result = _build_indicative_range(
+            rows,
+            [
+                PreviewUnmatchedItem(
+                    source_text="install new bath with shower over", reason="no match"
+                ),
+                PreviewUnmatchedItem(
+                    source_text="new vinyl flooring", reason="no match"
+                ),
+            ],
+            [],
+        )
+
+        assert result is not None
+        assert result.incomplete is True
+        assert "Not enough of the scope is priced yet" in result.basis
+
+    def test_incomplete_when_whole_scope_sections_are_unmatched(self):
+        rows = [_matched_row(guid=f"row-{i}") for i in range(5)]
+        coverage = PreviewCoverageSummary(section_count=6, matched_section_count=4)
+
+        result = _build_indicative_range(rows, [], [], coverage)
+
+        assert result is not None
+        assert result.incomplete is True
+        assert "2 scope sections not priced yet" in result.basis
+
+    def test_not_incomplete_when_coverage_summary_has_no_sections(self):
+        rows = [_matched_row(guid="row-1")]
+        coverage = PreviewCoverageSummary(section_count=0, matched_section_count=0)
+
+        result = _build_indicative_range(rows, [], [], coverage)
+
+        assert result is not None
+        assert result.incomplete is False

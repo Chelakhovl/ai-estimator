@@ -8,7 +8,10 @@ import app.config as app_config
 import app.security as app_security
 from app.main import app
 from app.schemas import PromptNormalizationAnswer, PromptNormalizationRequest
-from app.services.intake_normalizer import normalize_intake_prompt
+from app.services.intake_normalizer import (
+    _split_inline_scope_clauses,
+    normalize_intake_prompt,
+)
 
 
 def test_normalize_prompt_infers_first_floor_flat_room_schedule() -> None:
@@ -79,6 +82,41 @@ def test_normalize_prompt_splits_short_comma_scope_into_multiple_sections() -> N
     assert "Kitchen renovation" in response.normalized_prompt_markdown
     assert "paint walls 120 m2" in response.normalized_prompt_markdown
     assert "new flooring" in response.normalized_prompt_markdown
+
+
+def test_split_inline_scope_clauses_does_not_break_a_money_amount() -> None:
+    # Regression: a comma inside "£35,000" used to be treated as a clause
+    # boundary, chopping the number in half and gluing the trailing "000"
+    # onto whatever followed - e.g. turning this into a bogus room named
+    # "000. Kitchen" instead of two clean clauses.
+    line = "New kitchen extension, budget around £35,000. Kitchen: 4.5 x 3.2"
+
+    result = _split_inline_scope_clauses(line, None)
+
+    # The comma after "extension" is a real clause boundary and still splits;
+    # the one inside "£35,000" must not - it stays intact as one clause,
+    # rather than getting chopped into "...around £35" / "000. Kitchen...".
+    assert result == [
+        "New kitchen extension",
+        "budget around £35,000",
+        "Kitchen: 4.5 x 3.2",
+    ]
+
+
+def test_split_inline_scope_clauses_splits_on_sentence_ending_period() -> None:
+    line = "Install new sink and dishwasher. Bathroom: 2.4 x 1.8"
+
+    result = _split_inline_scope_clauses(line, None)
+
+    assert result == ["Install new sink and dishwasher", "Bathroom: 2.4 x 1.8"]
+
+
+def test_split_inline_scope_clauses_does_not_split_a_decimal_dimension() -> None:
+    line = "Kitchen: 4.5 x 3.2"
+
+    result = _split_inline_scope_clauses(line, None)
+
+    assert result == [line]
 
 
 def test_normalize_prompt_does_not_ask_supply_split_for_room_schedule_only() -> None:

@@ -517,6 +517,14 @@ class PreviewIndicativeRange(BaseModel):
     high: float = Field(ge=0)
     matched_total: float = Field(ge=0)
     basis: str
+    incomplete: bool = Field(
+        default=False,
+        description=(
+            "True when a large enough share of the scope is still unmatched "
+            "(by item count or by whole scope sections) that this range "
+            "should not be read as a real estimate yet."
+        ),
+    )
 
 
 class PreviewDuplicateFlag(BaseModel):
