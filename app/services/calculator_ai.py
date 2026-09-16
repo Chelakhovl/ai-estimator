@@ -195,8 +195,10 @@ the fields above cannot:
 """
 
 _TOO_SMALL_HINTS = (
+    # scope-limited only — "repaint" alone would false-positive on "repaint the whole
+    # house" (a legitimate is_external_redecoration job, not a small one)
     "paint one room",
-    "repaint",
+    "repaint one room",
     "touch up",
     "touch-up",
     "small repair",
@@ -219,27 +221,31 @@ _TOO_SMALL_HINTS = (
 # one of these — otherwise a description that simply lacks a project type (e.g. just
 # location details) gets misread as "small job" with nothing to back that up.
 _TOO_SMALL_SIGNAL_WORDS = (
-    "paint",
-    "decorat",
-    "touch up",
-    "touch-up",
-    "repair",
-    "leak",
-    "replace a door",
-    "replace a tap",
-    "regrout",
-    "re-grout",
-    "retile",
-    "re-tile",
+    # scope-limiting phrases only — bare verbs like "paint", "decorate" or "repair" are
+    # too broad and false-positive on a legitimately large job ("paint the whole house"
+    # maps to the wizard's own is_external_redecoration option, it isn't a small job)
     "one room",
     "single room",
     "small job",
-    "handyman",
-    "snagging",
+    "small repair",
+    "minor repair",
+    "touch up",
+    "touch-up",
     "patch up",
+    "patch-up",
     "freshen up",
     "spruce up",
-    "refresh",
+    "fix a leak",
+    "leaking tap",
+    "leaking pipe",
+    "replace a door",
+    "replace a tap",
+    "small bathroom refresh",
+    "bathroom refresh",
+    "regrout",
+    "re-grout",
+    "handyman",
+    "snagging",
 )
 
 

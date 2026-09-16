@@ -470,3 +470,18 @@ def test_confirm_too_small_requires_a_concrete_signal():
     assert _confirm_too_small("small bathroom refresh, new tiles and a mirror")
     assert not _confirm_too_small("Inner London, conservation area, listed building")
     assert not _confirm_too_small("hello, what's the weather today?")
+
+
+def test_confirm_too_small_rejects_a_whole_house_paint_job():
+    """A bare verb like "paint"/"repair" is not scope-limited — "paint the whole
+    house" must not be confused with "paint one room"."""
+    from app.services.calculator_ai import _confirm_too_small
+
+    assert not _confirm_too_small("I want to paint the whole house, inside and outside")
+    assert not _confirm_too_small("Repair the roof after storm damage")
+    assert _confirm_too_small("Just want to repaint one room, nothing structural")
+
+
+def test_parse_mock_whole_house_paint_is_not_too_small():
+    r = _parse_mock("I want to repaint the whole house, inside and outside")
+    assert r.fit != "too_small"
