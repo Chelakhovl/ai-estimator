@@ -402,3 +402,71 @@ def test_parse_project_real_path_keeps_too_small_as_understood(monkeypatch):
     assert r.fit == "too_small"
     assert r.fit_message
     assert r.project_types == []
+
+
+def test_parse_project_ignores_unconfirmed_too_small_verdict(monkeypatch):
+    """The model can call fit=too_small on a whim (e.g. just because no project type
+    matched) — only trust it when the client's own text names a concrete small job."""
+    _mock_env(monkeypatch)
+    import dataclasses
+
+    import app.services.calculator_ai as calc_ai
+    from app.schemas import LLMLocationGuess
+    from app.services.calculator_ai import LLMCalculatorParseOutput
+
+    monkeypatch.setattr(
+        calc_ai,
+        "settings",
+        dataclasses.replace(
+            calc_ai.settings, openai_api_key="sk-test", openai_model="gpt-4o"
+        ),
+    )
+
+    # the model extracted only location fields, but still (wrongly) called it too_small
+    parsed = LLMCalculatorParseOutput(
+        understood=True,
+        location=[LLMLocationGuess(field="area", value="Conservation")],
+        fit="too_small",
+        fit_message="Combit mainly takes on larger refurbishment projects.",
+    )
+
+    class _Msg:
+        def __init__(self, parsed):
+            self.parsed = parsed
+
+    class _Choice:
+        def __init__(self, parsed):
+            self.message = _Msg(parsed)
+
+    class _Completion:
+        def __init__(self, parsed):
+            self.choices = [_Choice(parsed)]
+
+    class _Completions:
+        def parse(self, **kwargs):
+            return _Completion(parsed)
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Beta:
+        chat = _Chat()
+
+    class _FakeClient:
+        beta = _Beta()
+
+    monkeypatch.setattr(calc_ai, "_openai_client", lambda: _FakeClient())
+
+    r = calc_ai.parse_project("Inner London, conservation area, listed building")
+    assert r.fit == "unsure"
+    assert r.fit_message == ""
+    assert r.location.get("area") == "Conservation"
+
+
+def test_confirm_too_small_requires_a_concrete_signal():
+    from app.services.calculator_ai import _confirm_too_small
+
+    assert _confirm_too_small("Just want to repaint one room, nothing structural")
+    assert _confirm_too_small("small bathroom refresh, new tiles and a mirror")
+    assert not _confirm_too_small("Inner London, conservation area, listed building")
+    assert not _confirm_too_small("hello, what's the weather today?")
