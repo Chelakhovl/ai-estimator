@@ -177,10 +177,13 @@ Rules:
 Also assess whether this is the kind of project Combit takes on, and capture anything
 the fields above cannot:
 - `fit`: "fit" when the description matches one of the allowed project types (or a
-  renovation of comparable scale). "too_small" when it is a single small job with no
-  match to any allowed type — e.g. repainting one room, a minor repair, replacing a
-  door or a tap, general handyman work, a small patch/snag. "unsure" only when you
-  genuinely cannot tell. Default to "fit" whenever a project type above is matched.
+  renovation of comparable scale). "too_small" ONLY when the text POSITIVELY names a
+  specific small job — e.g. repainting one room, a minor repair, replacing a door or a
+  tap, general handyman work, a small patch/snag. Never use "too_small" just because no
+  project type was matched — text that gives only location details, or is too vague or
+  short to describe any work at all, is "unsure", not "too_small". "unsure" is the
+  correct default whenever you cannot point to a specific reason either way. Default to
+  "fit" whenever a project type above is matched.
 - `fit_message`: ONLY when `fit` is "too_small" — one short, friendly sentence saying
   Combit mainly takes on larger refurbishment projects (extensions, full refurbishments,
   loft/garage conversions and similar) and a smaller local contractor may suit this
