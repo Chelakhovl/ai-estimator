@@ -963,6 +963,13 @@ class CalculatorParseResponse(BaseModel):
     uncertain: list[str] = Field(default_factory=list)
     summary: str = ""
     understood: bool = True  # false = not a building/renovation project description
+    # free-text details the client gave that no wizard field/checkbox captures — carried
+    # into the enquiry message, never used to compute the estimate itself
+    extra_notes: str = ""
+    # is this the kind of project Combit takes on: "fit" | "too_small" | "unsure"
+    fit: str = "fit"
+    fit_message: str = ""  # shown to the client only when fit != "fit"
+    transcript: str = ""  # populated when the input came from voice
     service_mode: str = "mock"  # "real" | "mock"
 
 
@@ -992,6 +999,16 @@ class LLMCalculatorParseOutput(BaseModel):
     uncertain: list[str] = Field(default_factory=list)
     summary: str = ""
     understood: bool = True
+    extra_notes: str = ""
+    fit: str = "fit"
+    fit_message: str = ""
+
+
+class CalculatorVoiceParseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audio_base64: str = Field(min_length=1, max_length=8_000_000)
+    mime_type: str = "audio/webm"
 
 
 class CalculatorExplainRequest(BaseModel):

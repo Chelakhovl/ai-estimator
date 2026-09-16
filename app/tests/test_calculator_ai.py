@@ -246,3 +246,101 @@ def test_ask_endpoint_deflects_scope_request(monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["deflected"] is True
+
+
+# ---- fit-check + extra notes (mock parse) --------------------------------------
+
+
+def test_parse_mock_flags_too_small_job():
+    r = _parse_mock("Just need to repaint one room, nothing structural")
+    assert r.project_types == []
+    assert r.fit == "too_small"
+    assert r.fit_message
+    assert "£" not in r.fit_message
+
+
+def test_parse_mock_matched_type_is_fit():
+    r = _parse_mock("Dormer loft conversion, roughly 30 m2")
+    assert r.fit == "fit"
+    assert r.fit_message == ""
+
+
+def test_parse_mock_unsure_when_nothing_matches():
+    r = _parse_mock("listed building in a conservation area, Inner London")
+    assert r.project_types == []
+    assert r.fit == "unsure"
+    assert r.fit_message == ""
+
+
+# ---- voice parse (mock mode, no OPENAI_API_KEY) --------------------------------
+
+
+def test_voice_parse_without_key_is_unavailable(monkeypatch):
+    _mock_env(monkeypatch)
+    from app.services.calculator_ai import (
+        CalculatorVoiceParseRequest,
+        voice_parse_project,
+    )
+
+    r = voice_parse_project(
+        CalculatorVoiceParseRequest(audio_base64="AAAA", mime_type="audio/webm")
+    )
+    assert r.understood is False
+    assert r.transcript == ""
+    assert r.service_mode == "mock"
+
+
+def test_voice_parse_endpoint_requires_api_key(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/voice-parse",
+        json={"audio_base64": "AAAA", "mime_type": "audio/webm"},
+    )
+    assert resp.status_code == 401
+
+
+def test_voice_parse_endpoint_mock_without_key(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/voice-parse",
+        json={"audio_base64": "AAAA", "mime_type": "audio/webm"},
+        headers={"x-api-key": "test-secret"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["understood"] is False
+    assert body["service_mode"] == "mock"
+
+
+def test_voice_parse_endpoint_rejects_empty_audio(monkeypatch):
+    _mock_env(monkeypatch)
+    resp = TestClient(app).post(
+        "/v1/calculator/voice-parse",
+        json={"audio_base64": "", "mime_type": "audio/webm"},
+        headers={"x-api-key": "test-secret"},
+    )
+    assert resp.status_code == 422
+
+
+def test_voice_parse_stitches_transcript_into_parsed_result(monkeypatch):
+    _mock_env(monkeypatch)
+    import dataclasses
+
+    import app.services.calculator_ai as calc_ai
+    from app.services.calculator_ai import CalculatorVoiceParseRequest
+
+    monkeypatch.setattr(
+        calc_ai,
+        "settings",
+        dataclasses.replace(calc_ai.settings, openai_api_key="sk-test"),
+    )
+    monkeypatch.setattr(
+        calc_ai, "_transcribe_audio", lambda req: "Dormer loft conversion, 30 m2"
+    )
+
+    r = calc_ai.voice_parse_project(
+        CalculatorVoiceParseRequest(audio_base64="AAAA", mime_type="audio/webm")
+    )
+    assert r.transcript == "Dormer loft conversion, 30 m2"
+    assert "Dormer loft conversion" in r.project_types
+    assert r.fit == "fit"
