@@ -214,6 +214,44 @@ _TOO_SMALL_HINTS = (
     "small bathroom refresh",
 )
 
+# Broader than _TOO_SMALL_HINTS on purpose: the LLM's own "too_small" call is only
+# trusted (see _confirm_too_small below) when the client's own text contains at least
+# one of these — otherwise a description that simply lacks a project type (e.g. just
+# location details) gets misread as "small job" with nothing to back that up.
+_TOO_SMALL_SIGNAL_WORDS = (
+    "paint",
+    "decorat",
+    "touch up",
+    "touch-up",
+    "repair",
+    "leak",
+    "replace a door",
+    "replace a tap",
+    "regrout",
+    "re-grout",
+    "retile",
+    "re-tile",
+    "one room",
+    "single room",
+    "small job",
+    "handyman",
+    "snagging",
+    "patch up",
+    "freshen up",
+    "spruce up",
+    "refresh",
+)
+
+
+def _confirm_too_small(text: str) -> bool:
+    """The model's own judgement of a "too small for Combit" job is only honoured
+    when the client's text itself contains a concrete small-job signal — otherwise
+    text that simply lacks a recognisable project type (e.g. only location details)
+    gets misread as "small job" with nothing in the text to support that."""
+    low = text.lower()
+    return any(h in low for h in _TOO_SMALL_SIGNAL_WORDS)
+
+
 _FIT_VALUES = frozenset({"fit", "too_small", "unsure"})
 
 _TOO_SMALL_MESSAGE = (
@@ -363,6 +401,10 @@ def parse_project(text: str) -> CalculatorParseResponse:
         if loc.field in LOCATION_FIELDS and loc.value in LOCATION_FIELDS[loc.field]
     }
     fit = parsed.fit if parsed.fit in _FIT_VALUES else "fit"
+    if fit == "too_small" and not _confirm_too_small(text):
+        # the model called it too small without the client's own text backing that up
+        # (e.g. text that only gives a location) — don't presume small, just say unsure
+        fit = "unsure"
     # a "too small for Combit" verdict is itself a real, useful signal — don't demand a
     # matched field on top of it, or a plain "repaint one room" collapses to "not understood"
     has_signal = bool(types or areas or options or location) or fit == "too_small"
