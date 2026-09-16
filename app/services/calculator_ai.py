@@ -165,9 +165,11 @@ Option toggles (list only the ones the text clearly asks for):
 Location fields (only if stated): {", ".join(f"{k} in {v}" for k, v in LOCATION_FIELDS.items())}
 
 Rules:
-- If the text is NOT a building / renovation project description (a greeting, an
-  unrelated question, random text, spam), set `understood` to false and leave every
-  other field empty. Otherwise set `understood` to true.
+- If the text is NOT about property/building work at all (a greeting, an unrelated
+  question, random text, spam), set `understood` to false and leave every other field
+  empty. ANY description of work on a home or property — however small, down to
+  repainting one room — counts as understood: set `understood` to true for it and use
+  `fit` (below) to say it is too small for Combit, never `understood` false.
 - If a loft/extension type is ambiguous, pick the most likely and add a line to `uncertain`.
 - Never guess an area from the number of bedrooms; leave it out.
 - `summary`: one plain sentence describing what you understood.
@@ -296,13 +298,14 @@ def _parse_mock(text: str) -> CalculatorParseResponse:
     if "inner london" in low or "central london" in low:
         location["location"] = "Inner London"
 
-    understood = bool(types or options or location)
     if types:
         fit, fit_message = "fit", ""
     elif any(h in low for h in _TOO_SMALL_HINTS):
         fit, fit_message = "too_small", _TOO_SMALL_MESSAGE
     else:
         fit, fit_message = "unsure", ""
+    # a "too small" verdict is itself a real signal — don't require a matched field too
+    understood = bool(types or options or location) or fit == "too_small"
     return CalculatorParseResponse(
         project_types=types,
         options=options,
@@ -356,13 +359,16 @@ def parse_project(text: str) -> CalculatorParseResponse:
         for loc in parsed.location
         if loc.field in LOCATION_FIELDS and loc.value in LOCATION_FIELDS[loc.field]
     }
-    understood = bool(parsed.understood) and bool(types or areas or options or location)
+    fit = parsed.fit if parsed.fit in _FIT_VALUES else "fit"
+    # a "too small for Combit" verdict is itself a real, useful signal — don't demand a
+    # matched field on top of it, or a plain "repaint one room" collapses to "not understood"
+    has_signal = bool(types or areas or options or location) or fit == "too_small"
+    understood = bool(parsed.understood) and has_signal
     if not understood:
         return CalculatorParseResponse(
             understood=False, summary="", service_mode="real"
         )
 
-    fit = parsed.fit if parsed.fit in _FIT_VALUES else "fit"
     fit_message = ""
     if fit == "too_small":
         fit_message = _sanitise_answer(parsed.fit_message) or _TOO_SMALL_MESSAGE

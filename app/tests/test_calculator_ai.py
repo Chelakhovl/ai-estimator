@@ -257,6 +257,8 @@ def test_parse_mock_flags_too_small_job():
     assert r.fit == "too_small"
     assert r.fit_message
     assert "£" not in r.fit_message
+    # a too-small verdict is itself real signal — must not collapse to "didn't understand"
+    assert r.understood is True
 
 
 def test_parse_mock_matched_type_is_fit():
@@ -344,3 +346,59 @@ def test_voice_parse_stitches_transcript_into_parsed_result(monkeypatch):
     assert r.transcript == "Dormer loft conversion, 30 m2"
     assert "Dormer loft conversion" in r.project_types
     assert r.fit == "fit"
+
+
+def test_parse_project_real_path_keeps_too_small_as_understood(monkeypatch):
+    _mock_env(monkeypatch)
+    import dataclasses
+
+    import app.services.calculator_ai as calc_ai
+    from app.services.calculator_ai import LLMCalculatorParseOutput
+
+    monkeypatch.setattr(
+        calc_ai,
+        "settings",
+        dataclasses.replace(
+            calc_ai.settings, openai_api_key="sk-test", openai_model="gpt-4o"
+        ),
+    )
+
+    parsed = LLMCalculatorParseOutput(
+        understood=True,
+        fit="too_small",
+        fit_message="Combit mainly takes on larger refurbishment projects.",
+    )
+
+    class _Msg:
+        def __init__(self, parsed):
+            self.parsed = parsed
+
+    class _Choice:
+        def __init__(self, parsed):
+            self.message = _Msg(parsed)
+
+    class _Completion:
+        def __init__(self, parsed):
+            self.choices = [_Choice(parsed)]
+
+    class _Completions:
+        def parse(self, **kwargs):
+            return _Completion(parsed)
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Beta:
+        chat = _Chat()
+
+    class _FakeClient:
+        beta = _Beta()
+
+    monkeypatch.setattr(calc_ai, "_openai_client", lambda: _FakeClient())
+
+    r = calc_ai.parse_project("Just want to repaint one room, nothing structural")
+    assert r.service_mode == "real"
+    assert r.understood is True
+    assert r.fit == "too_small"
+    assert r.fit_message
+    assert r.project_types == []
