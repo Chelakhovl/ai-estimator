@@ -11,9 +11,15 @@ from app.schemas import (
     CalculatorExplainResponse,
     CalculatorParseRequest,
     CalculatorParseResponse,
+    CalculatorVoiceParseRequest,
 )
 from app.security import require_api_key
-from app.services.calculator_ai import ask_project, explain_estimate, parse_project
+from app.services.calculator_ai import (
+    ask_project,
+    explain_estimate,
+    parse_project,
+    voice_parse_project,
+)
 
 router = APIRouter(prefix="/v1/calculator", tags=["public-calculator"])
 
@@ -25,6 +31,15 @@ def calculator_parse_project(
 ) -> CalculatorParseResponse:
     """Free-text project description -> the wizard's own fields (client reviews the pre-fill)."""
     return parse_project(payload.text)
+
+
+@router.post("/voice-parse", response_model=CalculatorParseResponse)
+def calculator_voice_parse(
+    payload: CalculatorVoiceParseRequest,
+    _authorized: Annotated[None, Depends(require_api_key)],
+) -> CalculatorParseResponse:
+    """A spoken project description -> transcript + the same pre-fill as parse-project."""
+    return voice_parse_project(payload)
 
 
 @router.post("/explain-estimate", response_model=CalculatorExplainResponse)

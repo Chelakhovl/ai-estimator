@@ -18,6 +18,7 @@ class Settings:
     openai_model: str
     openai_intake_model: str
     openai_intake_fast_model: str
+    openai_whisper_model: str
     openai_timeout_seconds: float
     openai_request_max_attempts: int
     service_api_key: str
@@ -40,6 +41,7 @@ def get_settings() -> Settings:
         openai_model=os.getenv("OPENAI_MODEL", ""),
         openai_intake_model=os.getenv("OPENAI_INTAKE_MODEL", "gpt-4o"),
         openai_intake_fast_model=os.getenv("OPENAI_INTAKE_FAST_MODEL", "gpt-4o"),
+        openai_whisper_model=os.getenv("OPENAI_WHISPER_MODEL", "whisper-1"),
         openai_timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "45")),
         openai_request_max_attempts=max(
             int(os.getenv("OPENAI_REQUEST_MAX_ATTEMPTS", "2")), 1

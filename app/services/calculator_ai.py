@@ -12,6 +12,8 @@ Both degrade to a keyword/template mock when OPENAI_API_KEY is absent.
 
 from __future__ import annotations
 
+import base64
+import io
 import logging
 import re
 from time import perf_counter
@@ -23,6 +25,7 @@ from app.schemas import (
     CalculatorExplainRequest,
     CalculatorExplainResponse,
     CalculatorParseResponse,
+    CalculatorVoiceParseRequest,
     LLMCalculatorAskOutput,
     LLMCalculatorExplainOutput,
     LLMCalculatorParseOutput,
@@ -168,7 +171,52 @@ Rules:
 - If a loft/extension type is ambiguous, pick the most likely and add a line to `uncertain`.
 - Never guess an area from the number of bedrooms; leave it out.
 - `summary`: one plain sentence describing what you understood.
+
+Also assess whether this is the kind of project Combit takes on, and capture anything
+the fields above cannot:
+- `fit`: "fit" when the description matches one of the allowed project types (or a
+  renovation of comparable scale). "too_small" when it is a single small job with no
+  match to any allowed type — e.g. repainting one room, a minor repair, replacing a
+  door or a tap, general handyman work, a small patch/snag. "unsure" only when you
+  genuinely cannot tell. Default to "fit" whenever a project type above is matched.
+- `fit_message`: ONLY when `fit` is "too_small" — one short, friendly sentence saying
+  Combit mainly takes on larger refurbishment projects (extensions, full refurbishments,
+  loft/garage conversions and similar) and a smaller local contractor may suit this
+  better. Leave empty otherwise.
+- `extra_notes`: concrete details the text states that none of the fields/options above
+  capture — access constraints, a deadline, a material preference, planning history,
+  "we want to stay in the property during works", etc. One or two short plain sentences,
+  no bullet points, no pounds figures. Leave empty if there is nothing extra to add.
 """
+
+_TOO_SMALL_HINTS = (
+    "paint one room",
+    "repaint",
+    "touch up",
+    "touch-up",
+    "small repair",
+    "minor repair",
+    "fix a leak",
+    "replace a door",
+    "replace a tap",
+    "one room",
+    "single room",
+    "small job",
+    "handyman",
+    "snagging",
+    "patch up",
+    "freshen up",
+    "small bathroom refresh",
+)
+
+_FIT_VALUES = frozenset({"fit", "too_small", "unsure"})
+
+_TOO_SMALL_MESSAGE = (
+    "This sounds like a smaller, single job — Combit mainly takes on larger "
+    "refurbishment projects (extensions, full refurbishments, loft and garage "
+    "conversions and similar), so a local handyman or smaller contractor may suit "
+    "this better. You're welcome to carry on if you'd still like a ballpark figure."
+)
 
 
 class CalculatorAIUnavailable(RuntimeError):
@@ -249,6 +297,12 @@ def _parse_mock(text: str) -> CalculatorParseResponse:
         location["location"] = "Inner London"
 
     understood = bool(types or options or location)
+    if types:
+        fit, fit_message = "fit", ""
+    elif any(h in low for h in _TOO_SMALL_HINTS):
+        fit, fit_message = "too_small", _TOO_SMALL_MESSAGE
+    else:
+        fit, fit_message = "unsure", ""
     return CalculatorParseResponse(
         project_types=types,
         options=options,
@@ -258,6 +312,8 @@ def _parse_mock(text: str) -> CalculatorParseResponse:
         if types
         else (["Could not identify a project type."] if understood else []),
         understood=understood,
+        fit=fit,
+        fit_message=fit_message,
         service_mode="mock",
     )
 
@@ -305,6 +361,13 @@ def parse_project(text: str) -> CalculatorParseResponse:
         return CalculatorParseResponse(
             understood=False, summary="", service_mode="real"
         )
+
+    fit = parsed.fit if parsed.fit in _FIT_VALUES else "fit"
+    fit_message = ""
+    if fit == "too_small":
+        fit_message = _sanitise_answer(parsed.fit_message) or _TOO_SMALL_MESSAGE
+    extra_notes = _sanitise_answer(parsed.extra_notes) if parsed.extra_notes else ""
+
     return CalculatorParseResponse(
         project_types=types,
         areas=areas,
@@ -313,6 +376,9 @@ def parse_project(text: str) -> CalculatorParseResponse:
         uncertain=[u for u in parsed.uncertain if u][:4],
         summary=parsed.summary.strip()[:280],
         understood=True,
+        fit=fit,
+        fit_message=fit_message,
+        extra_notes=extra_notes,
         service_mode="real",
     )
 
@@ -583,3 +649,74 @@ def ask_project(req: CalculatorAskRequest) -> CalculatorAskResponse:
     return CalculatorAskResponse(
         answer=answer, deflected=bool(parsed.deflected), service_mode="real"
     )
+
+
+# ---- voice_parse_project -----------------------------------------------------
+
+# MediaRecorder mime types the wizard's mic capture can produce, mapped to a filename
+# extension the OpenAI transcription endpoint uses to pick a decoder.
+_AUDIO_EXTENSION_BY_MIME: dict[str, str] = {
+    "audio/webm": "webm",
+    "audio/ogg": "ogg",
+    "audio/mp4": "mp4",
+    "audio/m4a": "m4a",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+}
+
+
+def _audio_extension(mime_type: str) -> str:
+    base = (mime_type or "").split(";")[0].strip().lower()
+    return _AUDIO_EXTENSION_BY_MIME.get(base, "webm")
+
+
+def _transcribe_audio(req: CalculatorVoiceParseRequest) -> str:
+    try:
+        raw = base64.b64decode(req.audio_base64, validate=False)
+    except Exception as exc:  # noqa: BLE001
+        raise CalculatorAIUnavailable(f"bad audio encoding: {exc}") from exc
+    if not raw:
+        raise CalculatorAIUnavailable("empty audio")
+
+    client = _openai_client()
+    file_obj = io.BytesIO(raw)
+    file_obj.name = f"note.{_audio_extension(req.mime_type)}"
+    result = client.audio.transcriptions.create(
+        model=settings.openai_whisper_model,
+        file=file_obj,
+    )
+    return (result.text or "").strip()
+
+
+def voice_parse_project(req: CalculatorVoiceParseRequest) -> CalculatorParseResponse:
+    """Transcribe a client's spoken project description, then run it through the same
+    pipeline as typed text — one shared source of truth for the pre-fill logic."""
+    if not settings.openai_api_key:
+        # no key at all -> transcription genuinely unavailable, not just degraded
+        return CalculatorParseResponse(
+            understood=False, transcript="", service_mode="mock"
+        )
+
+    try:
+        started = perf_counter()
+        transcript = _transcribe_audio(req)
+        logger.info(
+            "calculator voice transcription ok in %dms",
+            int((perf_counter() - started) * 1000),
+        )
+    except Exception as exc:  # noqa: BLE001 - never 500 the wizard over a mic glitch
+        logger.warning("calculator voice transcription failed (%s)", exc)
+        return CalculatorParseResponse(
+            understood=False, transcript="", service_mode="mock"
+        )
+
+    if len(transcript) < 3:
+        return CalculatorParseResponse(
+            understood=False, transcript=transcript, service_mode="real"
+        )
+
+    result = parse_project(transcript)
+    result.transcript = transcript[:800]
+    return result
