@@ -46,6 +46,26 @@ def test_sanitise_explain_dedupes_and_caps():
     assert len(got) <= 3
 
 
+def test_clean_bullet_strips_bare_pound_sign_without_a_following_digit():
+    """Found live 2026-09-28: the guardrail only matched £ immediately followed by a
+    digit ("£120"), so a bare £ in a general rate-methodology phrase like "£/m² rate"
+    sailed straight through untouched — no digit sits right after the symbol there.
+    The explain feature's whole premise is no-numbers, category-level copy, so there is
+    no legitimate bullet that needs a £ sign at all."""
+    assert _clean_bullet("Priced using a £/m² rate for this project type.") is None
+    assert _clean_bullet("This is a ballpark based on £/m² rates, not a quote.") is None
+
+
+def test_disclaimer_constant_has_no_pound_sign():
+    """The disclaimer is a hardcoded string appended to every explain response
+    (mock and real alike) — found live containing a bare £ ("£/m² rates") that the
+    per-bullet guardrail never touched because it isn't itself passed through
+    _clean_bullet/_sanitise_explain. Regression test for the constant itself."""
+    from app.services.calculator_ai import _DISCLAIMER
+
+    assert "£" not in _DISCLAIMER
+
+
 # ---- mock parse ----------------------------------------------------------------
 
 
@@ -94,6 +114,10 @@ def test_explain_mock_shape_and_guardrails():
     blob = " ".join(r.included + r.excluded + r.cost_drivers)
     assert "£" not in blob
     assert "hrs" not in blob
+    # the disclaimer is appended separately from the bullets (see
+    # test_disclaimer_constant_has_no_pound_sign) — check it here too since this is
+    # the actual response shape a real client receives
+    assert "£" not in r.disclaimer
     # driver context reflected
     assert any("listed" in d.lower() for d in r.cost_drivers)
 
@@ -485,3 +509,41 @@ def test_confirm_too_small_rejects_a_whole_house_paint_job():
 def test_parse_mock_whole_house_paint_is_not_too_small():
     r = _parse_mock("I want to repaint the whole house, inside and outside")
     assert r.fit != "too_small"
+
+
+def test_confirm_too_small_catches_real_phrasing_variants_found_live():
+    """Found live 2026-09-28: real client-style phrasing the exact-phrase list didn't
+    cover ("one bedroom" instead of "one room", "redo the bathroom" instead of any
+    listed phrase) made the model's own correct too_small call get overridden back to
+    unsure, and the whole response then collapsed to "didn't understand" — a materially
+    worse UX than the intended friendly amber note. This is the regression test for the
+    _TOO_SMALL_SIGNAL_WORDS additions + the _SINGLE_ROOM_PATTERN fallback."""
+    from app.services.calculator_ai import _confirm_too_small
+
+    assert _confirm_too_small("just want to repaint one bedroom")
+    assert _confirm_too_small("just want to repaint one bedroom, nothing structural")
+    assert _confirm_too_small("redo the bathroom")
+    assert _confirm_too_small("my kitchen needs doing")
+    assert _confirm_too_small("would like to redo our en-suite")
+
+
+def test_single_room_pattern_does_not_fire_inside_a_bigger_project():
+    """A named single room mentioned as PART of a much larger scope (e.g. a bathroom
+    within a full house refurbishment, or a kitchen within an extension) must not
+    collapse the whole job down to too_small — the big-project hint list is checked
+    first and short-circuits the single-room fallback."""
+    from app.services.calculator_ai import _confirm_too_small
+
+    assert not _confirm_too_small(
+        "Full house refurbishment including redoing the bathroom and a new kitchen"
+    )
+    assert not _confirm_too_small(
+        "Rear extension with a new kitchen and an en-suite bathroom"
+    )
+    assert not _confirm_too_small("Loft conversion with a new bedroom and en-suite")
+
+
+def test_parse_mock_one_bedroom_repaint_flags_too_small():
+    r = _parse_mock("just want to repaint one bedroom")
+    assert r.fit == "too_small"
+    assert r.understood is True

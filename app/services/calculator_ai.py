@@ -114,13 +114,20 @@ LOCATION_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 _DISCLAIMER = (
-    "This is a ballpark figure based on £/m² rates, not a quote. The real cost "
-    "depends on your drawings, specification and site conditions."
+    "This is a ballpark figure based on a per-square-metre rate, not a quote. The real "
+    "cost depends on your drawings, specification and site conditions."
 )
 
 # ---- guardrails ----------------------------------------------------------------
 
-_MONEY_PER_ITEM = re.compile(r"£\s?\d")
+# Found live, 2026-09-28: the explain bullets guardrail only ever checked for £
+# immediately followed by a digit ("£1,200"), so a bare £ in a general phrase like
+# "£/m² rate" (which the system prompt itself used to say, and which the model then
+# echoed back near-verbatim) sailed straight through — no digit sat right after the
+# symbol. Now blocks the bare symbol outright: the explain feature's entire premise is
+# category-level, no-numbers copy, so there is no legitimate reason for £ to appear in
+# it at all, not even inside a rate-methodology aside.
+_MONEY_SIGN = re.compile(r"£")
 _HOURS = re.compile(r"\b\d+(\.\d+)?\s?(hrs?|hours?)\b", re.IGNORECASE)
 
 
@@ -130,8 +137,8 @@ def _clean_bullet(text: str) -> str | None:
         t = t[:157].rstrip() + "…" if t else ""
     if not t:
         return None
-    # never leak a per-item price or an hours figure into the client-facing copy
-    if _MONEY_PER_ITEM.search(t) or _HOURS.search(t):
+    # never leak a price, a bare £ sign, or an hours figure into the client-facing copy
+    if _MONEY_SIGN.search(t) or _HOURS.search(t):
         return None
     return t
 
@@ -194,32 +201,19 @@ the fields above cannot:
   no bullet points, no pounds figures. Leave empty if there is nothing extra to add.
 """
 
-_TOO_SMALL_HINTS = (
-    # scope-limited only — "repaint" alone would false-positive on "repaint the whole
-    # house" (a legitimate is_external_redecoration job, not a small one)
-    "paint one room",
-    "repaint one room",
-    "touch up",
-    "touch-up",
-    "small repair",
-    "minor repair",
-    "fix a leak",
-    "replace a door",
-    "replace a tap",
-    "one room",
-    "single room",
-    "small job",
-    "handyman",
-    "snagging",
-    "patch up",
-    "freshen up",
-    "small bathroom refresh",
-)
-
-# Broader than _TOO_SMALL_HINTS on purpose: the LLM's own "too_small" call is only
-# trusted (see _confirm_too_small below) when the client's own text contains at least
-# one of these — otherwise a description that simply lacks a project type (e.g. just
-# location details) gets misread as "small job" with nothing to back that up.
+# Used by BOTH _parse_mock (offline/no-API-key dev path) and _confirm_too_small (the
+# real-path backstop on the model's own too_small verdict) — a single shared list, not
+# two that can quietly drift apart. They used to be two separate near-duplicate lists
+# (_TOO_SMALL_HINTS for mock, this one for real) that had already drifted: the mock
+# list was missing several phrases this one had, which would have silently reintroduced
+# the exact "collapses to didn't understand" bug in mock/dev testing while looking
+# fixed on the real path. _parse_mock now calls _confirm_too_small(text) directly
+# instead of checking its own copy.
+#
+# The LLM's own "too_small" call (real path) is only trusted (see _confirm_too_small
+# below) when the client's own text contains at least one of these, or matches
+# _SINGLE_ROOM_PATTERN — otherwise a description that simply lacks a project type (e.g.
+# just location details) gets misread as "small job" with nothing to back that up.
 _TOO_SMALL_SIGNAL_WORDS = (
     # scope-limiting phrases only — bare verbs like "paint", "decorate" or "repair" are
     # too broad and false-positive on a legitimately large job ("paint the whole house"
@@ -246,6 +240,42 @@ _TOO_SMALL_SIGNAL_WORDS = (
     "re-grout",
     "handyman",
     "snagging",
+    # found live, 2026-09-28: real client-style phrasing the exact-phrase list above
+    # didn't cover, so the model's own (correct) too_small call was getting overridden
+    # back to "unsure" and the whole response collapsed to "didn't understand" — see
+    # the regex fallback below for the general case this class of miss came from.
+    "one bedroom",
+    "just want to repaint",
+    "just want to redo",
+)
+
+# General fallback for "just [do something to] the/a/one/my single named room" — catches
+# real phrasing variants ("redo the bathroom", "my kitchen needs doing") without needing
+# every combination spelled out in _TOO_SMALL_SIGNAL_WORDS above. Still scope-limited on
+# purpose: only fires when a single named room appears WITHOUT also naming one of the
+# wizard's own bigger project types elsewhere in the text, so "redo the bathroom as part
+# of a full house refurbishment" still won't false-positive (the project-type guard is in
+# _confirm_too_small itself, checked after this pattern matches).
+_SINGLE_ROOM_PATTERN = re.compile(
+    r"\b(?:one|a|my|the|our)\s+(?:small\s+|little\s+)?"
+    r"(?:bedroom|bathroom|en-?suite|kitchen|room|toilet|wc)\b",
+    re.IGNORECASE,
+)
+
+# If any of these appear anywhere in the text, a lone "the bathroom"/"one bedroom" match
+# is very likely part of a much bigger job (e.g. "new bathroom" in a full refurbishment
+# scope) — don't let the single-room pattern override that.
+_BIG_PROJECT_HINTS = (
+    "extension",
+    "loft conversion",
+    "garage conversion",
+    "new build",
+    "full refurbishment",
+    "full house",
+    "whole house",
+    "refurbish the whole",
+    "outbuilding",
+    "garden room",
 )
 
 
@@ -255,7 +285,11 @@ def _confirm_too_small(text: str) -> bool:
     text that simply lacks a recognisable project type (e.g. only location details)
     gets misread as "small job" with nothing in the text to support that."""
     low = text.lower()
-    return any(h in low for h in _TOO_SMALL_SIGNAL_WORDS)
+    if any(h in low for h in _TOO_SMALL_SIGNAL_WORDS):
+        return True
+    if any(h in low for h in _BIG_PROJECT_HINTS):
+        return False
+    return bool(_SINGLE_ROOM_PATTERN.search(low))
 
 
 _FIT_VALUES = frozenset({"fit", "too_small", "unsure"})
@@ -347,7 +381,7 @@ def _parse_mock(text: str) -> CalculatorParseResponse:
 
     if types:
         fit, fit_message = "fit", ""
-    elif any(h in low for h in _TOO_SMALL_HINTS):
+    elif _confirm_too_small(text):
         fit, fit_message = "too_small", _TOO_SMALL_MESSAGE
     else:
         fit, fit_message = "unsure", ""
@@ -446,8 +480,8 @@ _EXPLAIN_SYSTEM = """You explain a building-cost BALLPARK to a UK homeowner, for
 refurbishment contractor. Reply in English, plain and reassuring.
 
 Return three short lists:
-- `included`: what a project of this kind broadly covers at this £/m² rate (structure, \
-first & second fix, standard finishes, etc.) — 3 to 5 bullets.
+- `included`: what a project of this kind broadly covers at this per-square-metre rate \
+(structure, first & second fix, standard finishes, etc.) — 3 to 5 bullets.
 - `excluded`: what is NOT in the figure (design & planning fees, structural sign-off, VAT, \
 a contingency, upgrades beyond a standard spec, anything client-supplied) — 3 to 5 bullets.
 - `cost_drivers`: 2 to 3 things that would move THIS client's number, based on their answers \
@@ -455,7 +489,9 @@ a contingency, upgrades beyond a standard spec, anything client-supplied) — 3 
 premium materials, unusually small or large floor area).
 
 Hard rules:
-- No pounds figures. No per-item prices. No work breakdown by trade line. No hour counts.
+- No pounds figures, and never write or spell out the £ symbol anywhere in your reply — not \
+even in a general phrase like "£/m² rate" or "priced in £". Say "per square metre" instead.
+- No per-item prices. No work breakdown by trade line. No hour counts.
 - Each bullet is one short sentence. Keep it general, category-level.
 """
 
@@ -594,7 +630,7 @@ def _sanitise_answer(text: str) -> str:
     t = " ".join(str(text).split())
     if not t:
         return ""
-    if _MONEY_PER_ITEM.search(t) or _HOURS.search(t) or _WORK_LIST.search(str(text)):
+    if _MONEY_SIGN.search(t) or _HOURS.search(t) or _WORK_LIST.search(str(text)):
         return ""
     words = t.split()
     if len(words) > 70:  # hard cap regardless of the prompt
