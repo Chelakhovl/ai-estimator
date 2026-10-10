@@ -57,6 +57,113 @@ PROJECT_TYPES: tuple[str, ...] = (
     "Porch",
 )
 
+# ---- project duration (Igor's rules, 2026-10-10) --------------------------------
+#
+# The `ask` endpoint used to let the LLM free-guess a timeline ("6-12 months" — far
+# too wide to be useful) whenever a client asked "how long would this take?". Igor
+# gave concrete, deterministic ranges per project type instead, plus a combination
+# rule: works that run in PARALLEL with a house refurbishment don't ADD their own
+# full duration on top — they add a smaller 1-2 month tail for the serious
+# structural ones. This is a fixed lookup table, not something the model decides —
+# the whole point is a number Igor can stand behind every time the same project
+# types are selected.
+
+_EXTENSION_TYPES: frozenset[str] = frozenset(
+    {"Back extension", "Side extension", "1st floor extension"}
+)
+_LOFT_TYPES: frozenset[str] = frozenset(
+    {
+        "Roof light loft conversion",
+        "Dormer loft conversion",
+        "Hip to gable loft conversion",
+        "L-shaped loft conversion",
+        "Mansard loft conversion",
+    }
+)
+_GARAGE_TYPES: frozenset[str] = frozenset(
+    {
+        "Internal garage conversion",
+        "Attached garage conversion",
+        "Free standing garage conversion",
+    }
+)
+
+# Standalone duration per project type, in whole months. Used both as the base
+# figure for a solo project and as the lookup for which "extra" tail to add when
+# combined with a house refurbishment (see project_duration_months below).
+_SOLO_DURATION_MONTHS: dict[str, tuple[int, int]] = {
+    "House refurbishment": (5, 6),
+    "Flat refurbishment": (5, 6),
+    "New build": (12, 13),
+    "Outbuilding": (5, 5),
+}
+_EXTENSION_SOLO_MONTHS: tuple[int, int] = (3, 3)
+_LOFT_SOLO_MONTHS: tuple[int, int] = (3, 3)
+_GARAGE_SOLO_MONTHS: tuple[int, int] = (2, 2)
+_REFURB_PLUS_STRUCTURAL_MONTHS: tuple[int, int] = (6, 7)
+
+# A serious structural add-on (extension and/or loft) alongside a full house
+# refurbishment runs mostly in parallel with it — Igor gave this combined range
+# directly ("Full House Refurbishment + Extension" = 6-7 months, same figure for
+# "+ Loft Conversion"), not a formula to derive from the two solo durations. Both
+# add-ons present at once still use this one combined range, not a double tail.
+
+
+def project_duration_months(project_types: list[str]) -> tuple[int, int] | None:
+    """Igor's deterministic (min, max) whole-months duration estimate for the
+    selected project types, or None when nothing recognisable was selected.
+
+    Not a sum of each type's own duration — a house refurbishment combined with
+    an extension and/or loft conversion adds only a short tail (they run mostly
+    in parallel), matching how Igor actually schedules these jobs."""
+    types = set(project_types or [])
+    if not types:
+        return None
+
+    has_refurb = "House refurbishment" in types
+    has_extension = bool(types & _EXTENSION_TYPES)
+    has_loft = bool(types & _LOFT_TYPES)
+    has_garage = bool(types & _GARAGE_TYPES)
+
+    if has_refurb and (has_extension or has_loft):
+        return _REFURB_PLUS_STRUCTURAL_MONTHS
+
+    # any other recognised type present alongside House refurbishment (garage,
+    # outbuilding, porch, new build, flat refurb) — not covered by Igor's
+    # combination rule, so just use the refurbishment's own range; it's still
+    # the dominant driver of the programme.
+    if has_refurb:
+        return _SOLO_DURATION_MONTHS["House refurbishment"]
+
+    # solo (no house refurbishment selected) — longest-running selected type wins,
+    # since Combit only takes on one build programme at a time regardless of how
+    # many smaller items are also ticked.
+    candidates: list[tuple[int, int]] = []
+    for t in types:
+        if t in _SOLO_DURATION_MONTHS:
+            candidates.append(_SOLO_DURATION_MONTHS[t])
+    if has_extension:
+        candidates.append(_EXTENSION_SOLO_MONTHS)
+    if has_loft:
+        candidates.append(_LOFT_SOLO_MONTHS)
+    if has_garage:
+        candidates.append(_GARAGE_SOLO_MONTHS)
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda r: r[1])
+
+
+def format_duration_answer(months: tuple[int, int]) -> str:
+    lo, hi = months
+    span = f"{lo} months" if lo == hi else f"{lo}–{hi} months"
+    return (
+        f"Typical project duration: approximately {span}. Actual timescales may vary "
+        "depending on the size, complexity, structural works and specific project "
+        "requirements."
+    )
+
+
 # floor-area input name per project type (calc-popup.php)
 AREA_FIELD_BY_TYPE: dict[str, str] = {
     "House refurbishment": "hr_ground_floor_area",
@@ -593,19 +700,22 @@ calculator, on behalf of Combit — a London refurbishment contractor. Reply in 
 
 Keep it to 2-3 short sentences, max ~55 words, plain and friendly. Use their project
 details for relevance. Draw on general UK renovation knowledge (planning permission,
-permitted development, party wall, building control, typical timelines, sequencing,
-what "conservation area" or "listed" means in practice, VAT, what a ballpark rate
-usually covers).
+permitted development, party wall, building control, sequencing, what "conservation
+area" or "listed" means in practice, VAT, what a ballpark rate usually covers).
 
-Questions about timelines, how long the work takes, planning permission,
-permitted development, building control, party wall, the order of works, VAT,
-conservation-area or listed rules, and what a ballpark rate typically covers are
-ALL on-topic — answer them normally, do NOT deflect them.
+Questions about planning permission, permitted development, building control, party
+wall, the order of works, VAT, conservation-area or listed rules, and what a ballpark
+rate typically covers are ALL on-topic — answer them normally, do NOT deflect them.
 
 Hard limits:
 - NEVER give a pounds figure, a price, or any cost breakdown.
 - NEVER produce a scope of works, a task list, or "your project needs: 1)... 2)...".
 - NEVER give design dimensions or tell them how to design anything.
+- NEVER state a specific duration, timeframe, or number of weeks/months for how long
+  the project will take (a dedicated, deterministic answer already covers that
+  elsewhere — you should not normally see a pure "how long" question at all, but if
+  one still reaches you, answer only the non-timing part if there is one, and say a
+  firm schedule is best confirmed on a call with Combit).
 - ONLY set `deflected` to true when they explicitly ask for a written quote, an
   itemised or line-by-line estimate, or a full scope of works, OR the question is
   genuinely not about a building/renovation project. Then answer with ONE line:
@@ -638,7 +748,47 @@ def _sanitise_answer(text: str) -> str:
     return t
 
 
+# Igor 2026-10-10: a duration/timeline question is answered from the deterministic
+# project_duration_months() table, not the LLM — see that function's docstring for
+# why. Matches the same "how long"/"timeline"/"take" phrasing the mock path already
+# recognised, plus a couple of close variants, so this question never silently falls
+# through to a free-guessed answer in either the real or mock path.
+_DURATION_QUESTION = re.compile(
+    r"\bhow\s+long\b|\btimeline\b|\btime\s*frame\b|\bhow\s+much\s+time\b|"
+    r"\bhow\s+many\s+(weeks|months)\b|\bduration\b|\btake\b",
+    re.IGNORECASE,
+)
+
+
+def _is_duration_question(question: str) -> bool:
+    return bool(_DURATION_QUESTION.search(question))
+
+
+def _duration_answer(
+    req: CalculatorAskRequest, service_mode: str
+) -> CalculatorAskResponse | None:
+    """Returns the deterministic duration answer when the question is about
+    timing AND at least one recognised project type was selected — otherwise None,
+    so the caller falls through to its normal (LLM or mock) handling. A duration
+    question with no recognisable project type still goes through the normal path,
+    since there's nothing in Igor's table to ground an answer in yet."""
+    if not _is_duration_question(req.question):
+        return None
+    months = project_duration_months(req.project_types)
+    if months is None:
+        return None
+    return CalculatorAskResponse(
+        answer=format_duration_answer(months),
+        deflected=False,
+        service_mode=service_mode,
+    )
+
+
 def _ask_mock(req: CalculatorAskRequest) -> CalculatorAskResponse:
+    duration = _duration_answer(req, "mock")
+    if duration is not None:
+        return duration
+
     q = req.question.lower()
     detailed = any(
         w in q
@@ -665,9 +815,9 @@ def _ask_mock(req: CalculatorAskRequest) -> CalculatorAskResponse:
         )
     elif "how long" in q or "timeline" in q or "take" in q:
         a = (
-            "A typical single-storey extension or loft runs roughly 10-16 weeks on site once "
-            "you have drawings and approvals; design and planning add time before that. Book a "
-            "call with Combit for a schedule for your project."
+            "A typical project runs a few months on site once you have drawings and "
+            "approvals, depending on scope — Combit can give you a schedule for your "
+            "specific project. Book a call for details."
         )
     elif "vat" in q:
         a = (
@@ -698,6 +848,13 @@ def _ask_mock(req: CalculatorAskRequest) -> CalculatorAskResponse:
 def ask_project(req: CalculatorAskRequest) -> CalculatorAskResponse:
     if not settings.openai_api_key or not settings.openai_model:
         return _ask_mock(req)
+
+    # Deterministic duration answer short-circuits BEFORE the LLM call entirely —
+    # Igor's whole point was a number he can stand behind every time, not something
+    # the model might phrase differently (or widen to "6-12 months") call to call.
+    duration = _duration_answer(req, "real")
+    if duration is not None:
+        return duration
 
     context = {
         "project_types": req.project_types,

@@ -14,6 +14,8 @@ from app.services.calculator_ai import (
     _parse_mock,
     _sanitise_answer,
     _sanitise_explain,
+    format_duration_answer,
+    project_duration_months,
 )
 
 
@@ -270,6 +272,162 @@ def test_ask_endpoint_deflects_scope_request(monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["deflected"] is True
+
+
+# ---- project duration (Igor's deterministic rules, 2026-10-10) ------------------
+
+
+def test_duration_solo_house_refurbishment():
+    assert project_duration_months(["House refurbishment"]) == (5, 6)
+
+
+def test_duration_solo_flat_refurbishment():
+    assert project_duration_months(["Flat refurbishment"]) == (5, 6)
+
+
+def test_duration_solo_new_build():
+    assert project_duration_months(["New build"]) == (12, 13)
+
+
+def test_duration_solo_outbuilding():
+    assert project_duration_months(["Outbuilding"]) == (5, 5)
+
+
+def test_duration_solo_extension():
+    assert project_duration_months(["Back extension"]) == (3, 3)
+    assert project_duration_months(["Side extension"]) == (3, 3)
+    assert project_duration_months(["1st floor extension"]) == (3, 3)
+
+
+def test_duration_solo_loft_any_subtype():
+    for t in (
+        "Roof light loft conversion",
+        "Dormer loft conversion",
+        "Hip to gable loft conversion",
+        "L-shaped loft conversion",
+        "Mansard loft conversion",
+    ):
+        assert project_duration_months([t]) == (3, 3)
+
+
+def test_duration_solo_garage_any_subtype():
+    for t in (
+        "Internal garage conversion",
+        "Attached garage conversion",
+        "Free standing garage conversion",
+    ):
+        assert project_duration_months([t]) == (2, 2)
+
+
+def test_duration_refurbishment_plus_extension_is_combined_not_summed():
+    # Igor: runs mostly in parallel — NOT 5-6 (refurb) + 3 (extension) = 8-9
+    assert project_duration_months(["House refurbishment", "Back extension"]) == (6, 7)
+
+
+def test_duration_refurbishment_plus_loft_is_combined_not_summed():
+    assert project_duration_months(
+        ["House refurbishment", "Dormer loft conversion"]
+    ) == (6, 7)
+
+
+def test_duration_refurbishment_plus_extension_and_loft_still_one_combined_range():
+    # both structural add-ons at once still don't stack two tails
+    assert project_duration_months(
+        ["House refurbishment", "Back extension", "Dormer loft conversion"]
+    ) == (6, 7)
+
+
+def test_duration_refurbishment_plus_non_structural_uses_refurbishment_range():
+    # garage/outbuilding/porch aren't in Igor's "serious structural" combo rule
+    assert project_duration_months(["House refurbishment", "Outbuilding"]) == (5, 6)
+
+
+def test_duration_multiple_solo_types_picks_longest():
+    # no house refurbishment selected — longest-running selected type wins
+    assert project_duration_months(
+        ["Back extension", "Internal garage conversion"]
+    ) == (
+        3,
+        3,
+    )
+
+
+def test_duration_unrecognised_type_only_returns_none():
+    assert project_duration_months(["Porch"]) is None
+
+
+def test_duration_empty_list_returns_none():
+    assert project_duration_months([]) is None
+
+
+def test_format_duration_answer_range():
+    text = format_duration_answer((6, 7))
+    assert text == (
+        "Typical project duration: approximately 6–7 months. Actual timescales "
+        "may vary depending on the size, complexity, structural works and specific "
+        "project requirements."
+    )
+
+
+def test_format_duration_answer_single_value_no_dash():
+    text = format_duration_answer((2, 2))
+    assert "2 months" in text
+    assert "–" not in text
+
+
+def test_ask_mock_duration_question_uses_deterministic_table():
+    r = _ask_mock(
+        CalculatorAskRequest(
+            question="How long would this take?",
+            project_types=["House refurbishment", "Back extension"],
+        )
+    )
+    assert r.deflected is False
+    assert r.service_mode == "mock"
+    assert "6–7 months" in r.answer
+    assert "£" not in r.answer
+
+
+def test_ask_mock_duration_question_without_recognised_type_falls_through():
+    # no project type Igor's table recognises — still answers, just not from the table
+    r = _ask_mock(
+        CalculatorAskRequest(
+            question="How long would this take?", project_types=["Porch"]
+        )
+    )
+    assert r.deflected is False
+    assert "£" not in r.answer
+
+
+def test_ask_project_duration_question_real_mode_is_deterministic(monkeypatch):
+    # configured (non-mock) env — duration still short-circuits before any LLM call,
+    # so this never depends on network/API availability. Calls ask_project directly
+    # (same approach as the other *_mock unit tests) rather than through the HTTP
+    # endpoint, to avoid the module-reload dance the TestClient/app import needs.
+    monkeypatch.setenv("SERVICE_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
+    import app.config as app_config
+    import app.services.calculator_ai as calc_ai
+
+    reload(app_config)
+    reload(calc_ai)
+    try:
+        resp = calc_ai.ask_project(
+            calc_ai.CalculatorAskRequest(
+                question="What's the typical timeline for this?",
+                project_types=["New build"],
+            )
+        )
+        assert resp.service_mode == "real"
+        assert "12–13 months" in resp.answer
+        assert resp.deflected is False
+    finally:
+        # restore mock env for any tests running after this one in the same process
+        monkeypatch.setenv("OPENAI_API_KEY", "")
+        monkeypatch.setenv("OPENAI_MODEL", "")
+        reload(app_config)
+        reload(calc_ai)
 
 
 # ---- fit-check + extra notes (mock parse) --------------------------------------
