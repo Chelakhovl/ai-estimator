@@ -131,8 +131,12 @@ def _build_user_message(request: RoomLayoutRequest) -> str:
 
 class RoomLayoutService:
     def __init__(self) -> None:
-        self.model = settings.openai_model
-        self.enabled = bool(settings.openai_api_key and settings.openai_model)
+        # The main preview/pricing pipeline (llm_client.py) uses settings.openai_model, a stronger model
+        # reserved for the estimation logic that needs it. Rearranging a handful of objects within fixed
+        # walls is a much simpler spatial-reasoning task — the cheaper "fast" model this service already
+        # uses for intake/vision calls is enough, at a fraction of the cost per call.
+        self.model = settings.openai_intake_fast_model or settings.openai_model
+        self.enabled = bool(settings.openai_api_key and self.model)
         self.client: OpenAI | None = None
         if self.enabled:
             from openai import OpenAI

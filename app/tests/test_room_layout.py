@@ -138,6 +138,24 @@ def test_llm_response_raises_when_all_placements_are_unknown_ids():
         service._llm_response(_simple_request())
 
 
+def test_service_uses_the_cheaper_fast_model_not_the_main_estimation_model(monkeypatch):
+    """Rearranging a few objects within fixed walls is much simpler than the pricing/estimation
+    pipeline (llm_client.py) this ai-service otherwise mostly serves — this should run on the cheaper
+    intake-fast model, not the stronger one reserved for that harder task."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5-strong")
+    monkeypatch.setenv("OPENAI_INTAKE_FAST_MODEL", "gpt-5-mini")
+    from importlib import reload
+    import app.config as app_config
+    import app.services.room_layout_service as room_layout_module
+
+    reload(app_config)
+    reload(room_layout_module)
+
+    service = room_layout_module.RoomLayoutService()
+    assert service.model == "gpt-5-mini"
+
+
 def test_suggest_falls_back_to_mock_with_warning_when_llm_raises():
     from unittest.mock import MagicMock
 
