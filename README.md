@@ -128,6 +128,33 @@ Response example:
 }
 ```
 
+### `POST /v1/room-layout/suggest`
+
+Added for RefurbwayRoomScan (iOS). Given a scanned room's fixed geometry
+(walls/doors/windows/openings) and the furniture/fixtures RoomPlan detected
+in it, suggests alternative placements for those SAME objects — never
+invents or removes any. Requires `x-api-key`.
+
+```json
+{
+  "room_name": "Bedroom",
+  "floor_area_sq_m": 12.0,
+  "surfaces": [
+    {"kind": "wall", "width_m": 4.0, "x": 0, "z": 0, "rotation_radians": 0},
+    {"kind": "door", "width_m": 0.8, "x": 0, "z": 0, "rotation_radians": 0}
+  ],
+  "objects": [
+    {"id": "bed-1", "category": "Bed", "width_m": 1.5, "depth_m": 2.0}
+  ],
+  "variant_count": 3
+}
+```
+
+Response: `{"variants": [...], "mode": "llm" | "mock", "warnings": [...]}`.
+Falls back to `mode: "mock"` (empty variants, explanatory warning) when
+`OPENAI_API_KEY`/`OPENAI_MODEL` aren't configured or the LLM call fails —
+same convention as every other AI endpoint in this service.
+
 ## Project structure
 
 - `app/main.py`: FastAPI entrypoint
@@ -136,6 +163,8 @@ Response example:
 - `app/api/preview.py`: preview endpoint
 - `app/api/health.py`: health endpoint
 - `app/api/scope_extract.py`: structured scope extraction endpoint
+- `app/api/room_layout.py`: room layout suggestion endpoint (RefurbwayRoomScan)
+- `app/services/room_layout_service.py`: layout suggestion logic with mock + LLM fallback
 - `app/services/calculator.py`: deterministic pricing logic
 - `app/services/normalizer.py`: prompt normalization helpers
 - `app/services/candidate_shortlist.py`: shortlist builder
