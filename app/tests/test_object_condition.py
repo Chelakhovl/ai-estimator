@@ -211,6 +211,35 @@ def test_assess_batch_deduplicates_near_identical_items(monkeypatch):
     assert response.results[0].condition_notes == response.results[1].condition_notes
 
 
+def test_assess_batch_defaults_to_unknown_when_model_omits_an_item(monkeypatch):
+    """Partial-batch failure: the model returns fewer results than groups sent (e.g. truncated output,
+    or it silently skips one item) — every original item must still get a result back, with the
+    missing one defaulting to "unknown" rather than being dropped or crashing the whole batch."""
+    service = ObjectConditionService()
+    service.enabled = True
+
+    fake_client = MagicMock()
+    # Only item_index 0 is present — item_index 1 (the sofa) is missing from the model's response.
+    fake_client.chat.completions.create.return_value = _fake_chat_response(
+        [{"item_index": 0, "condition": "good", "condition_notes": "", "renovation_flags": []}]
+    )
+    _patch_openai_client(monkeypatch, fake_client)
+
+    items = [_item(id="stove", category="Stove"), _item(id="sofa", category="Sofa", width_m=2.0)]
+    response = service.assess_batch(ObjectConditionBatchRequest(items=items))
+
+    assert len(response.results) == 2
+    results_by_id = {r.id: r for r in response.results}
+    assert results_by_id["stove"].condition == "good"
+    assert results_by_id["sofa"].condition == "unknown"
+    assert results_by_id["sofa"].condition_notes == ""
+    assert results_by_id["sofa"].renovation_flags == []
+    # Mode stays "llm" — a partially-incomplete model response is still a real response, not a total
+    # failure that should fall back to mock (that path is covered separately, see
+    # test_assess_falls_back_to_mock_when_batch_raises).
+    assert response.mode == "llm"
+
+
 def test_assess_batch_does_not_deduplicate_different_categories(monkeypatch):
     service = ObjectConditionService()
     service.enabled = True

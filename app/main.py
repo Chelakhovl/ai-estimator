@@ -14,7 +14,9 @@ from app.api.normalize import router as normalize_router
 from app.api.object_condition import router as object_condition_router
 from app.api.preview import router as preview_router
 from app.api.project_intake import router as project_intake_router
+from app.api.renovation_recommendations import router as renovation_recommendations_router
 from app.api.room_layout import router as room_layout_router
+from app.api.room_redesign import router as room_redesign_router
 from app.api.scope_extract import router as scope_extract_router
 from app.api.templates import router as templates_router
 from app.config import settings
@@ -60,6 +62,8 @@ app.include_router(normalize_router)
 app.include_router(object_condition_router)
 app.include_router(preview_router)
 app.include_router(project_intake_router)
+app.include_router(renovation_recommendations_router)
 app.include_router(room_layout_router)
+app.include_router(room_redesign_router)
 app.include_router(scope_extract_router)
 app.include_router(templates_router)
