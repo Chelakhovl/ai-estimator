@@ -1,3 +1,6 @@
+# openai pinned to 1.109.1: a prior Railway build cached an older pip-install layer against an
+# earlier version of this file, running the service with openai 1.65.2 (no Responses API) despite
+# this pin — this comment changes the file's hash so the build can't reuse that stale layer.
 fastapi==0.115.8
 uvicorn[standard]==0.34.0
 pydantic==2.10.6
