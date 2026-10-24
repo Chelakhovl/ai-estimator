@@ -121,6 +121,12 @@ class RenovationRecommendationsService:
     def is_enabled(self) -> bool:
         return self.enabled
 
+    def _supports_responses_parse(self) -> bool:
+        if self.client is None:
+            return False
+        responses_api = getattr(self.client, "responses", None)
+        return callable(getattr(responses_api, "parse", None))
+
     def suggest(self, request: RenovationRecommendationsRequest) -> RenovationRecommendationsResponse:
         if not request.objects:
             return RenovationRecommendationsResponse(
@@ -144,16 +150,30 @@ class RenovationRecommendationsService:
         assert self.client is not None
         started_at = perf_counter()
 
-        response = self.client.responses.parse(
-            model=self.model,
-            input=[
-                {"role": "system", "content": _build_system_prompt()},
-                {"role": "user", "content": _build_user_message(request)},
-            ],
-            text_format=_LLMRecommendationsOutput,
-            temperature=0.4,
-        )
-        parsed = getattr(response, "output_parsed", None)
+        messages = [
+            {"role": "system", "content": _build_system_prompt()},
+            {"role": "user", "content": _build_user_message(request)},
+        ]
+
+        if self._supports_responses_parse():
+            response = self.client.responses.parse(
+                model=self.model,
+                input=messages,
+                text_format=_LLMRecommendationsOutput,
+                temperature=0.4,
+            )
+            parsed = getattr(response, "output_parsed", None)
+        else:
+            # Installed openai SDK predates the Responses API — fall back to the
+            # older structured-output path (same pattern as llm_client.py).
+            response = self.client.beta.chat.completions.parse(
+                model=self.model,
+                messages=messages,
+                response_format=_LLMRecommendationsOutput,
+                temperature=0.4,
+            )
+            parsed = response.choices[0].message.parsed if response.choices else None
+
         if parsed is None:
             raise RenovationRecommendationsError("Model returned no parsed structured output.")
 

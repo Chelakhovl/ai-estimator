@@ -141,11 +141,22 @@ class IntakeLLMClient:
         return [{"role": "user", "content": content}]
 
     def chat(self, payload: IntakeChatRequest) -> LLMIntakeChatOutput:
-        if not self.is_enabled() or not self._supports_responses_parse():
+        if not self.is_enabled():
             raise RuntimeError("Intake LLM is not configured.")
+        if not self._supports_responses_parse():
+            # No fallback to beta.chat.completions.parse here, unlike llm_client.py:
+            # this path sends PDF attachments as Responses-API "input_file" content
+            # parts, and the Chat Completions API on this SDK version has no file
+            # content-part type at all (only text/image/audio) - there's no way to
+            # carry the PDF through that path. Needs the openai SDK upgraded.
+            raise RuntimeError(
+                "Intake LLM requires a newer openai SDK (Responses API) for PDF attachments; "
+                "the installed version only supports the older chat-completions API."
+            )
+        model = self.fast_model or self.model
         started_at = perf_counter()
         response = self.client.responses.parse(
-            model=self.fast_model or self.model,
+            model=model,
             input=self._build_chat_input(payload),
             text_format=LLMIntakeChatOutput,
         )
@@ -153,14 +164,20 @@ class IntakeLLMClient:
         if parsed is None:
             raise RuntimeError("Intake chat returned no structured output.")
         self.last_metadata = {
-            "model_name": self.fast_model or self.model,
+            "model_name": model,
             "latency_ms": int((perf_counter() - started_at) * 1000),
         }
         return parsed
 
     def finalize(self, payload: IntakeFinalizeRequest) -> LLMIntakeFinalizeOutput:
-        if not self.is_enabled() or not self._supports_responses_parse():
+        if not self.is_enabled():
             raise RuntimeError("Intake LLM is not configured.")
+        if not self._supports_responses_parse():
+            # See chat() above - no chat-completions fallback possible for PDF input.
+            raise RuntimeError(
+                "Intake LLM requires a newer openai SDK (Responses API) for PDF attachments; "
+                "the installed version only supports the older chat-completions API."
+            )
         started_at = perf_counter()
         response = self.client.responses.parse(
             model=self.model,

@@ -138,6 +138,48 @@ def test_llm_response_raises_when_all_placements_are_unknown_ids():
         service._llm_response(_simple_request())
 
 
+def test_llm_response_falls_back_to_chat_completions_when_sdk_has_no_responses_api():
+    """Reproduces a real production bug: an installed openai SDK old enough to predate the
+    Responses API (e.g. 1.65.2) has no `.responses` attribute at all - calling
+    `client.responses.parse(...)` directly raises AttributeError, which `suggest()` was silently
+    swallowing into a generic mock fallback, making the real request never actually run. A plain
+    MagicMock() doesn't catch this because it auto-creates `.responses.parse` regardless of
+    whether the real SDK has it; `spec=[...]` constrains the mock to only the attributes listed,
+    just like the real client on an old SDK."""
+    from unittest.mock import MagicMock
+
+    from app.services.room_layout_service import (
+        _LLMLayoutOutput,
+        _LLMLayoutVariant,
+        _LLMPlacedObject,
+    )
+
+    service = RoomLayoutService()
+    service.enabled = True
+
+    fake_response = MagicMock()
+    fake_response.choices = [MagicMock(message=MagicMock(parsed=_LLMLayoutOutput(
+        variants=[
+            _LLMLayoutVariant(
+                label="Against the wall",
+                rationale="Leaves a clear walkway.",
+                placements=[_LLMPlacedObject(id="bed-1", x=1.0, z=1.0, rotation_radians=0.0)],
+            )
+        ]
+    )))]
+
+    # spec=["beta"] means accessing .responses raises AttributeError, exactly like the real
+    # openai.OpenAI client on a version that predates the Responses API.
+    service.client = MagicMock(spec=["beta"])
+    service.client.beta.chat.completions.parse.return_value = fake_response
+
+    response = service._llm_response(_simple_request())
+
+    assert response.mode == "llm"
+    assert len(response.variants) == 1
+    service.client.beta.chat.completions.parse.assert_called_once()
+
+
 def test_service_uses_the_cheaper_fast_model_not_the_main_estimation_model(monkeypatch):
     """Rearranging a few objects within fixed walls is much simpler than the pricing/estimation
     pipeline (llm_client.py) this ai-service otherwise mostly serves — this should run on the cheaper
