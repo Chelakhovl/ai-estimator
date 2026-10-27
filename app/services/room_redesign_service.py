@@ -52,6 +52,13 @@ class RoomRedesignRequest(BaseModel):
     room_name: str = ""
     style: str
     image_base64: str = Field(repr=False)  # JPEG of the room, repr=False keeps it out of error/log lines
+    # PNG the same pixel dimensions as image_base64, opaque over every wall/door/window/opening and
+    # transparent elsewhere (see the iOS client's RoomPhotoCapture.structureMaskPNGData) — OpenAI's own
+    # images.edit convention is the inverse of what "mask" usually implies: the TRANSPARENT regions are
+    # what gets edited, the opaque ones are protected. None when the client couldn't build one (older
+    # app version, or the captured frame's camera pose put no structural surface in view) — _llm_response
+    # falls back to prompt-only geometry preservation in that case, same behaviour this had before.
+    mask_base64: str | None = Field(default=None, repr=False)
 
 
 class RoomRedesignResponse(BaseModel):
@@ -118,13 +125,27 @@ class RoomRedesignService:
         image_file = io.BytesIO(image_bytes)
         image_file.name = "room.jpg"  # the SDK reads this to infer the upload's content type
 
-        response = self.client.images.edit(
-            model=self.model,
-            image=image_file,
-            prompt=prompt,
-            size="1024x1024",
-            quality="medium",
-        )
+        edit_kwargs: dict = {
+            "model": self.model,
+            "image": image_file,
+            "prompt": prompt,
+            # "auto" (not a fixed "1024x1024") — a room photo from the iOS client's camera is a
+            # non-square 4:3-ish portrait, and forcing a square output would conflict with the mask,
+            # which OpenAI requires to be the EXACT same pixel dimensions as the input image.
+            "size": "auto",
+            "quality": "medium",
+        }
+        # With a mask, "keep the structure unchanged" becomes an API-enforced constraint on the opaque
+        # pixels rather than only a prompt instruction the model can (and does, in practice) partially
+        # ignore — walls drifting, a window moving, the perspective subtly shifting. Without one, this
+        # call is unchanged from before masks existed.
+        if request.mask_base64:
+            mask_bytes = base64.b64decode(request.mask_base64)
+            mask_file = io.BytesIO(mask_bytes)
+            mask_file.name = "mask.png"
+            edit_kwargs["mask"] = mask_file
+
+        response = self.client.images.edit(**edit_kwargs)
 
         data = response.data or []
         if not data or not data[0].b64_json:

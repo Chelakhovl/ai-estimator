@@ -130,6 +130,48 @@ def test_llm_response_uses_gpt_image_1_model():
     assert kwargs["model"] == "gpt-image-2.5-sunburst"
 
 
+def test_llm_response_omits_mask_when_client_sent_none():
+    from unittest.mock import MagicMock
+
+    service = RoomRedesignService()
+    service.enabled = True
+
+    fake_image = MagicMock()
+    fake_image.b64_json = "ZmFrZQ=="
+    fake_response = MagicMock()
+    fake_response.data = [fake_image]
+    service.client = MagicMock()
+    service.client.images.edit.return_value = fake_response
+
+    # No mask_base64 — an older app install, or a scan where mask projection failed (see the iOS
+    # client's RoomPhotoCapture.structureMaskPNGData) — must fall back to prompt-only behaviour
+    # exactly as before masks existed, not send a missing/None mask to the API.
+    service._llm_response(_simple_request())
+
+    _, kwargs = service.client.images.edit.call_args
+    assert "mask" not in kwargs
+
+
+def test_llm_response_passes_mask_to_api_when_provided():
+    from unittest.mock import MagicMock
+
+    service = RoomRedesignService()
+    service.enabled = True
+
+    fake_image = MagicMock()
+    fake_image.b64_json = "ZmFrZQ=="
+    fake_response = MagicMock()
+    fake_response.data = [fake_image]
+    service.client = MagicMock()
+    service.client.images.edit.return_value = fake_response
+
+    fake_mask_base64 = base64.b64encode(b"not a real png, just test bytes").decode("ascii")
+    service._llm_response(_simple_request(mask_base64=fake_mask_base64))
+
+    _, kwargs = service.client.images.edit.call_args
+    assert "mask" in kwargs
+
+
 def test_prompt_includes_style_specific_and_shared_instructions():
     from unittest.mock import MagicMock
 
