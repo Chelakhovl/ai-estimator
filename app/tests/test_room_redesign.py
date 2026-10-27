@@ -127,7 +127,7 @@ def test_llm_response_uses_gpt_image_1_model():
     service._llm_response(_simple_request())
 
     _, kwargs = service.client.images.edit.call_args
-    assert kwargs["model"] == "gpt-image-1"
+    assert kwargs["model"] == "gpt-image-2.5-sunburst"
 
 
 def test_prompt_includes_style_specific_and_shared_instructions():

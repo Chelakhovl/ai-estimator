@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # ── Request/response shapes ──────────────────────────────────────────────────
 #
 # Unlike room_layout_service.py / renovation_recommendations_service.py, this service generates an
-# IMAGE, not structured text — it calls `client.images.edit` (gpt-image-1), not
+# IMAGE, not structured text — it calls `client.images.edit` (gpt-image-2.5-sunburst), not
 # `client.responses.parse`. There is no object-id filtering step here because the output isn't JSON
 # with ids to validate; the only thing to check is that a usable image actually came back.
 
@@ -66,10 +66,14 @@ class RoomRedesignError(RuntimeError):
 
 class RoomRedesignService:
     def __init__(self) -> None:
-        # gpt-image-1 is OpenAI's current image generation/edit model — separate from
+        # gpt-image-2.5-sunburst is OpenAI's current image generation/edit model — separate from
         # settings.openai_model (used for text/structured-output calls elsewhere in this service),
         # since it's a different capability, not a "stronger" or "weaker" version of the same thing.
-        self.model = "gpt-image-1"
+        # gpt-image-1 (the original choice here) was shut down by OpenAI on 2026-10-23; every call
+        # since then failed with "openai.BadRequestError: ... The model 'gpt-image-1' does not exist"
+        # and silently fell back to the mock response via the except-block below, so the feature looked
+        # "available" (200 OK, no visible error) but never actually generated a real redesign.
+        self.model = "gpt-image-2.5-sunburst"
         self.enabled = bool(settings.openai_api_key)
         self.client: OpenAI | None = None
         if self.enabled:
