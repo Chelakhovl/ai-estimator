@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import logging
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
 
@@ -51,18 +52,34 @@ _SHARED_INSTRUCTIONS = (
 class RoomRedesignRequest(BaseModel):
     room_name: str = ""
     style: str
-    image_base64: str = Field(repr=False)  # JPEG of the room, repr=False keeps it out of error/log lines
-    # PNG the same pixel dimensions as image_base64, opaque over every wall/door/window/opening and
-    # transparent elsewhere (see the iOS client's RoomPhotoCapture.structureMaskPNGData) — OpenAI's own
-    # images.edit convention is the inverse of what "mask" usually implies: the TRANSPARENT regions are
-    # what gets edited, the opaque ones are protected. None when the client couldn't build one (older
-    # app version, or the captured frame's camera pose put no structural surface in view) — _llm_response
-    # falls back to prompt-only geometry preservation in that case, same behaviour this had before.
-    mask_base64: str | None = Field(default=None, repr=False)
+    # 1-3 JPEGs of the room (different angles from a single scan), repr=False keeps them out of
+    # error/log lines.
+    images_base64: list[str] = Field(repr=False)
+    # Same length as images_base64, one slot per image. Each entry is a PNG the same pixel dimensions
+    # as the matching image, opaque over every wall/door/window/opening and transparent elsewhere (see
+    # the iOS client's RoomPhotoCapture.structureMaskPNGData) — OpenAI's own images.edit convention is
+    # the inverse of what "mask" usually implies: the TRANSPARENT regions are what gets edited, the
+    # opaque ones are protected. An entry is None when the client couldn't build a mask for that frame
+    # (older app version, or that frame's camera pose put no structural surface in view) — _llm_response
+    # falls back to prompt-only geometry preservation for that one frame, same behaviour this had before
+    # per-frame masks existed.
+    masks_base64: list[str | None] = Field(default_factory=list, repr=False)
+
+    @model_validator(mode="after")
+    def _pad_masks_to_match_images(self) -> "RoomRedesignRequest":
+        # The iOS client always sends masks_base64 at the same length as images_base64 (see
+        # RoomRedesignClient.swift), but pad defensively rather than raising — an older/misbehaving
+        # client sending a short or absent masks_base64 should just lose mask protection on the
+        # trailing frames, not fail the whole request.
+        if len(self.masks_base64) < len(self.images_base64):
+            self.masks_base64 = self.masks_base64 + [None] * (
+                len(self.images_base64) - len(self.masks_base64)
+            )
+        return self
 
 
 class RoomRedesignResponse(BaseModel):
-    image_base64: str | None = None
+    images_base64: list[str] = Field(default_factory=list)
     mode: str  # "llm" | "mock"
     warnings: list[str] = Field(default_factory=list)
 
@@ -100,7 +117,7 @@ class RoomRedesignService:
             # Validated here, not just left to the client — a client bug or a tampered request
             # shouldn't be able to send an arbitrary string into the image-edit prompt.
             return RoomRedesignResponse(
-                image_base64=None,
+                images_base64=[],
                 mode="mock",
                 warnings=[f"Unknown style '{request.style}'."],
             )
@@ -121,7 +138,58 @@ class RoomRedesignService:
         started_at = perf_counter()
 
         prompt = _STYLE_PROMPTS[request.style] + _SHARED_INSTRUCTIONS
-        image_bytes = base64.b64decode(request.image_base64)
+
+        # Each frame's images.edit call is an independent, blocking HTTP request — fan them out with
+        # asyncio.to_thread/gather rather than looping sequentially, since a 3-frame scan would
+        # otherwise take 3x as long for no reason. asyncio.run() is used (rather than making this
+        # method itself async) because the FastAPI route above calls generate()/_llm_response()
+        # synchronously; nothing else in this codebase has an async call chain yet, so this keeps the
+        # concurrency contained to this one method instead of threading "async" through the route.
+        results = asyncio.run(self._edit_all_frames(request, prompt))
+
+        images_base64: list[str] = []
+        warnings: list[str] = []
+        for index, result in enumerate(results):
+            if isinstance(result, BaseException):
+                logger.exception(
+                    "Room redesign frame %d/%d failed (style=%s); skipping it.",
+                    index + 1,
+                    len(results),
+                    request.style,
+                    exc_info=result,
+                )
+                continue
+            images_base64.append(result)
+
+        if not images_base64:
+            raise RoomRedesignError("Model returned no image data for any frame.")
+
+        logger.info(
+            "Room redesign generated %d/%d frame(s) in %dms (style=%s)",
+            len(images_base64),
+            len(results),
+            int((perf_counter() - started_at) * 1000),
+            request.style,
+        )
+
+        return RoomRedesignResponse(images_base64=images_base64, mode="llm", warnings=warnings)
+
+    async def _edit_all_frames(
+        self, request: RoomRedesignRequest, prompt: str
+    ) -> list[str | BaseException]:
+        """Runs one images.edit call per (image, mask) pair in parallel via worker threads — the
+        OpenAI SDK's images.edit is a blocking call, so asyncio.to_thread is what lets these overlap.
+        return_exceptions=True so one frame's failure doesn't cancel the others still in flight."""
+        tasks = [
+            asyncio.to_thread(self._edit_one_frame, prompt, image_b64, mask_b64)
+            for image_b64, mask_b64 in zip(request.images_base64, request.masks_base64)
+        ]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _edit_one_frame(self, prompt: str, image_base64: str, mask_base64: str | None) -> str:
+        assert self.client is not None
+
+        image_bytes = base64.b64decode(image_base64)
         image_file = io.BytesIO(image_bytes)
         image_file.name = "room.jpg"  # the SDK reads this to infer the upload's content type
 
@@ -139,8 +207,8 @@ class RoomRedesignService:
         # pixels rather than only a prompt instruction the model can (and does, in practice) partially
         # ignore — walls drifting, a window moving, the perspective subtly shifting. Without one, this
         # call is unchanged from before masks existed.
-        if request.mask_base64:
-            mask_bytes = base64.b64decode(request.mask_base64)
+        if mask_base64:
+            mask_bytes = base64.b64decode(mask_base64)
             mask_file = io.BytesIO(mask_bytes)
             mask_file.name = "mask.png"
             edit_kwargs["mask"] = mask_file
@@ -151,20 +219,14 @@ class RoomRedesignService:
         if not data or not data[0].b64_json:
             raise RoomRedesignError("Model returned no image data.")
 
-        logger.info(
-            "Room redesign generated in %dms (style=%s)",
-            int((perf_counter() - started_at) * 1000),
-            request.style,
-        )
-
-        return RoomRedesignResponse(image_base64=data[0].b64_json, mode="llm")
+        return data[0].b64_json
 
     def _mock_response(self) -> RoomRedesignResponse:
         """Deterministic fallback when the LLM path is unavailable/disabled — same mock-mode convention
         as the rest of this codebase: stays usable end-to-end without an API key, just without a real
         generated image."""
         return RoomRedesignResponse(
-            image_base64=None,
+            images_base64=[],
             mode="mock",
             warnings=["AI room redesign isn't configured on this server yet."],
         )
